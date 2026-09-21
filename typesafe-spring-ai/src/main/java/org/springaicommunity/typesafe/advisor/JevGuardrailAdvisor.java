@@ -132,7 +132,9 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 			if (text != null && !text.isBlank()) {
 				JevGuardrail.Verdict verdict = this.inputBattery.screen(this.typeSafeClient, text);
 				if (shouldBlock(verdict)) {
-					logger.warn("Jev guardrail blocked the request: {}", verdict.summary());
+					if (logger.isWarnEnabled()) {
+						logger.warn("Jev guardrail blocked the request: {}", verdict.summary());
+					}
 					// Refused before the chain runs, so the model is never called.
 					return refuse(chatClientRequest, verdict);
 				}
@@ -147,7 +149,9 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 			if (!answer.isBlank()) {
 				JevGuardrail.Verdict verdict = this.outputBattery.screen(this.typeSafeClient, answer);
 				if (shouldBlock(verdict)) {
-					logger.warn("Jev guardrail blocked the response: {}", verdict.summary());
+					if (logger.isWarnEnabled()) {
+						logger.warn("Jev guardrail blocked the response: {}", verdict.summary());
+					}
 					return refuse(chatClientRequest, verdict);
 				}
 				logInconclusive(verdict);
@@ -169,7 +173,9 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 
 	private void logInconclusive(JevGuardrail.Verdict verdict) {
 		if (verdict.outcome() == JevGuardrail.Outcome.REVIEW) {
-			logger.info("Jev guardrail flagged a turn for review but let it through: {}", verdict.summary());
+			if (logger.isInfoEnabled()) {
+				logger.info("Jev guardrail flagged a turn for review but let it through: {}", verdict.summary());
+			}
 		}
 	}
 

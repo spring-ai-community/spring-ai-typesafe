@@ -174,8 +174,10 @@ public class JevDocumentFilter implements DocumentPostProcessor {
 					classification = classify(result.orThrow());
 				}
 				catch (TypeSafeException ex) {
-					logger.warn("Jev returned an unusable screening for document {}, passing it through: {}",
-							document.getId(), ex.getMessage());
+					if (logger.isWarnEnabled()) {
+						logger.warn("Jev returned an unusable screening for document {}, passing it through: {}",
+								document.getId(), ex.getMessage());
+					}
 				}
 			}
 

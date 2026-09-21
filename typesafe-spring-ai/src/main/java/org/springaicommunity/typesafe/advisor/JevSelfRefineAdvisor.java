@@ -152,14 +152,18 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 			// predicate is given the request that actually produced this response, which
 			// from the second attempt onward is the feedback-augmented one.
 			if (this.skipEvaluationPredicate.test(request, response)) {
-				logger.debug("Skipping evaluation because skipEvaluationPredicate returned true.");
+				if (logger.isDebugEnabled()) {
+					logger.debug("Skipping evaluation because skipEvaluationPredicate returned true.");
+				}
 				return response;
 			}
 
 			JevVerdict verdict = this.judge.judge(getPromptQuestion(chatClientRequest), getAssistantAnswer(response));
 
 			if (verdict.passed()) {
-				logger.info("Jev judgement passed on attempt {}: {}", attempt, verdict.summary());
+				if (logger.isInfoEnabled()) {
+					logger.info("Jev judgement passed on attempt {}: {}", attempt, verdict.summary());
+				}
 				return response;
 			}
 
@@ -167,13 +171,17 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 				if (this.failOnExhaustedAttempts) {
 					throw new JevSelfRefineFailedException(this.maxRepeatAttempts, verdict);
 				}
-				logger.warn("Jev judgement still failing after {} attempts, returning the last response. {}{}{}",
-						this.maxRepeatAttempts, verdict.summary(), System.lineSeparator(), verdict.feedback());
+				if (logger.isWarnEnabled()) {
+					logger.warn("Jev judgement still failing after {} attempts, returning the last response. {}{}{}",
+							this.maxRepeatAttempts, verdict.summary(), System.lineSeparator(), verdict.feedback());
+				}
 				return response;
 			}
 
-			logger.warn("Jev judgement failed on attempt {}: {}{}{}", attempt, verdict.summary(),
-					System.lineSeparator(), verdict.feedback());
+			if (logger.isWarnEnabled()) {
+				logger.warn("Jev judgement failed on attempt {}: {}{}{}", attempt, verdict.summary(),
+						System.lineSeparator(), verdict.feedback());
+			}
 
 			request = addEvaluationFeedback(chatClientRequest, verdict);
 		}

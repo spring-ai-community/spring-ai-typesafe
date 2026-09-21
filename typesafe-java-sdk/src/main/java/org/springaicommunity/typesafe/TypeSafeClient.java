@@ -385,13 +385,17 @@ public class TypeSafeClient {
 
 			Duration backoff = this.retryPolicy.backoffFor(attempt, lastFailure);
 			if (exceedsBudget(startedAt, backoff)) {
-				logger.debug("Jev {} giving up after attempt {}: the retry budget cannot absorb another {}ms wait",
-						endpoint, attempt, backoff.toMillis());
+				if (logger.isDebugEnabled()) {
+					logger.debug("Jev {} giving up after attempt {}: the retry budget cannot absorb another {}ms wait",
+							endpoint, attempt, backoff.toMillis());
+				}
 				throw lastFailure;
 			}
 
-			logger.debug("Jev {} attempt {} failed ({}), retrying in {}ms", endpoint, attempt,
-					lastFailure.getMessage(), backoff.toMillis());
+			if (logger.isDebugEnabled()) {
+				logger.debug("Jev {} attempt {} failed ({}), retrying in {}ms", endpoint, attempt,
+						lastFailure.getMessage(), backoff.toMillis());
+			}
 			sleep(backoff, lastFailure);
 		}
 	}

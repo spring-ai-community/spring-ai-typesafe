@@ -148,8 +148,10 @@ public class JevToolIndex implements ToolIndex {
 
 		double applicability = response.noulValue(APPLICABILITY_QUESTION);
 		if (applicability < this.applicabilityThreshold) {
-			logger.debug("Jev tool search found nothing applicable for '{}' (applicability {} < {})",
-					toolSearchRequest.query(), applicability, this.applicabilityThreshold);
+			if (logger.isDebugEnabled()) {
+				logger.debug("Jev tool search found nothing applicable for '{}' (applicability {} < {})",
+						toolSearchRequest.query(), applicability, this.applicabilityThreshold);
+			}
 			return empty();
 		}
 
