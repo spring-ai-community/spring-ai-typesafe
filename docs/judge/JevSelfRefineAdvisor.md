@@ -107,4 +107,4 @@ verdict needs the whole answer, so there is nothing useful to emit incrementally
 
 - [JevJudge](JevJudge.md) — the criteria this advisor evaluates
 - [JevGuardrailAdvisor](../guardrails/JevGuardrailAdvisor.md)
-- [Demos](../demos.md) — `LlmJudgeDemoApplication`
+- [Demos](../demos.md) — `ModelJudgeDemoApplication`

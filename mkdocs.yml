@@ -47,7 +47,7 @@ nav:
     - Batches: client/Batches.md
     - Errors and Retries: client/ErrorsAndRetries.md
     - Spring Boot Starter: client/SpringBootStarter.md
-  - LLM-as-a-Judge:
+  - Model-as-a-Judge:
     - JevJudge: judge/JevJudge.md
     - JevSelfRefineAdvisor: judge/JevSelfRefineAdvisor.md
     - JevEvaluator: judge/JevEvaluator.md

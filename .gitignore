@@ -42,3 +42,4 @@ build/
 # The site is built and published by CI, never committed.
 site/
 /ideas/*
+/experiments/jev-as-a-judge

@@ -12,7 +12,7 @@ other modules are resolvable; `spring-boot:run` is a single-module goal, so it t
 | [`ToolSearchDemo`](#toolsearchdemo) | picking a tool, and declining to | `TYPESAFE_API_KEY` |
 | [`CascadeDemo`](#cascadedemo) | Jev as the gate in a cheap-model-first cascade | `TYPESAFE_API_KEY` |
 | [`GuardrailDemo`](#guardraildemo) | screening a turn in both directions | `TYPESAFE_API_KEY` |
-| [`LlmJudgeDemoApplication`](#llmjudgedemoapplication) | the self-refine judge loop | both keys |
+| [`ModelJudgeDemoApplication`](#modeljudgedemoapplication) | the self-refine judge loop | both keys |
 
 Only the last one needs `ANTHROPIC_API_KEY`.
 
@@ -192,9 +192,9 @@ The closing section runs the same battery outside a `ChatClient`, which is how y
 text that is not a chat turn — a document about to be indexed, say — and shows the severity
 each request scored.
 
-## `LlmJudgeDemoApplication`
+## `ModelJudgeDemoApplication`
 
-LLM-as-a-judge with Jev doing the judging. A Spring AI `ChatClient` backed by Anthropic
+Model-as-a-judge with Jev doing the judging. A Spring AI `ChatClient` backed by Anthropic
 answers "What is current weather in Paris?" using a weather tool that returns an absurd
 temperature two times out of three.
 

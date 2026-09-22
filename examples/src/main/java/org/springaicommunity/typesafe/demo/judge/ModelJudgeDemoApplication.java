@@ -34,7 +34,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
 
 /**
- * LLM-as-a-judge with Jev doing the judging.
+ * Model-as-a-judge with Jev doing the judging.
  *
  * <p>
  * The weather tool deliberately returns an absurd temperature part of the time. A judge
@@ -49,10 +49,10 @@ import org.springframework.core.Ordered;
  * @author Christian Tzolov
  */
 @SpringBootApplication
-public class LlmJudgeDemoApplication {
+public class ModelJudgeDemoApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(LlmJudgeDemoApplication.class, args);
+		SpringApplication.run(ModelJudgeDemoApplication.class, args);
 	}
 
 	@Bean

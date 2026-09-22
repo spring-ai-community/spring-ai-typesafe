@@ -43,7 +43,7 @@ import org.springaicommunity.typesafe.response.UnknownAnswer;
 import org.springframework.util.Assert;
 
 /**
- * An LLM-as-a-judge built out of atomic questions rather than one rubric prompt.
+ * A Model-as-a-judge built out of atomic questions rather than one rubric prompt.
  *
  * <p>
  * Every criterion is answered against the same state in a single call, in parallel, so

@@ -7,7 +7,7 @@
 
 A Java client for the [TypeSafe AI](https://docs.typesafe.ai/introduction) **System One**
 API (`jev`), built on Spring `RestClient` and Jackson 3, plus Spring AI integrations that
-use it as an LLM-as-a-judge, a guardrail, a RAG post-processor and a tool index.
+use it as a Model-as-a-judge, a guardrail, a RAG post-processor and a tool index.
 
 📖 **[Reference documentation](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/)**
 
@@ -81,7 +81,7 @@ versions — see
 
 | | |
 | --- | --- |
-| [JevJudge](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/judge/JevJudge/) | LLM-as-a-judge from atomic criteria rather than one rubric prompt |
+| [JevJudge](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/judge/JevJudge/) | Model-as-a-judge from atomic criteria rather than one rubric prompt |
 | [JevSelfRefineAdvisor](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/judge/JevSelfRefineAdvisor/) | Judge an answer, feed the defect back, retry |
 | [JevGuardrailAdvisor](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/guardrails/JevGuardrailAdvisor/) | Screen prompts and answers; no retry, because an unsafe answer is not a draft |
 | [JevDocumentFilter](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/rag/JevDocumentFilter/) / [JevDocumentReranker](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/rag/JevDocumentReranker/) | Triage retrieved passages, then order what survives |

@@ -39,7 +39,7 @@ double frustration = response.scoreValue("frustration");        // 1.1
 **What this SDK adds on top of the API:**
 
 - A typed client with retries, a typed exception hierarchy and a batch API
-- `JevJudge` — LLM-as-a-judge built from atomic criteria instead of one rubric prompt
+- `JevJudge` — Model-as-a-judge built from atomic criteria instead of one rubric prompt
 - Spring AI integrations that implement the framework's own SPIs: `CallAdvisor`,
   `DocumentPostProcessor`, `ToolIndex` and `Evaluator`
 

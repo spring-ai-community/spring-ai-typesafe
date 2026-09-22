@@ -119,7 +119,7 @@ class WeatherJudgeTests {
 	}
 
 	private JevVerdict judge(String question, String answer) {
-		return LlmJudgeDemoApplication.WeatherJudge.create(this.typeSafeClient).judge(question, answer);
+		return ModelJudgeDemoApplication.WeatherJudge.create(this.typeSafeClient).judge(question, answer);
 	}
 
 	private org.springframework.test.web.client.ResponseCreator respondWith(double helpfulness, double plausible,

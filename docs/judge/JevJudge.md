@@ -1,6 +1,6 @@
 # JevJudge
 
-An LLM-as-a-judge built out of atomic questions rather than one rubric prompt. Every
+A Model-as-a-judge built out of atomic questions rather than one rubric prompt. Every
 criterion is answered against the same state in a single call, in parallel, and each keeps
 its own threshold.
 

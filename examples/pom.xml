@@ -12,12 +12,12 @@
 
 	<artifactId>typesafe-examples</artifactId>
 	<name>Spring AI TypeSafe :: Examples</name>
-	<description>Runnable examples: LLM-as-a-judge, guardrails, RAG post-processing and tool search backed by Jev instead of a second chat model</description>
+	<description>Runnable examples: Model-as-a-judge, guardrails, RAG post-processing and tool search backed by Jev instead of a second chat model</description>
 
 	<properties>
 		<!-- The default demo. Override on the command line to run the other one, e.g.
 		     -Dspring-boot.run.main-class=org.springaicommunity.typesafe.demo.JevQuickstart -->
-		<start-class>org.springaicommunity.typesafe.demo.judge.LlmJudgeDemoApplication</start-class>
+		<start-class>org.springaicommunity.typesafe.demo.judge.ModelJudgeDemoApplication</start-class>
 		<spring-boot.run.main-class>${start-class}</spring-boot.run.main-class>
 	</properties>
 

@@ -12,7 +12,7 @@ takes `-pl examples` **without** `-am`.
 | [ToolSearchDemo](#toolsearchdemo) | picking a tool, and declining to | `TYPESAFE_API_KEY` |
 | [CascadeDemo](#cascadedemo) | Jev as the gate in a cheap-model-first cascade | `TYPESAFE_API_KEY` |
 | [GuardrailDemo](#guardraildemo) | screening a turn in both directions | `TYPESAFE_API_KEY` |
-| [LlmJudgeDemoApplication](#llmjudgedemoapplication) | the self-refine judge loop | both keys |
+| [ModelJudgeDemoApplication](#modeljudgedemoapplication) | the self-refine judge loop | both keys |
 
 Only the last needs `ANTHROPIC_API_KEY`.
 
@@ -186,9 +186,9 @@ each request scored.
 
 See [JevGuardrailAdvisor](guardrails/JevGuardrailAdvisor.md).
 
-## LlmJudgeDemoApplication
+## ModelJudgeDemoApplication
 
-LLM-as-a-judge with Jev doing the judging. A Spring AI `ChatClient` backed by Anthropic
+Model-as-a-judge with Jev doing the judging. A Spring AI `ChatClient` backed by Anthropic
 answers a weather question using a tool that returns an absurd temperature half the time.
 
 ```bash
