@@ -293,7 +293,7 @@
   
     
   
-  LLM-as-a-Judge
+  Model-as-a-Judge
 
         </a>
       </li>
@@ -827,7 +827,7 @@
   <span class="md-ellipsis">
     
   
-    LLM-as-a-Judge
+    Model-as-a-Judge
   
 
     
@@ -843,7 +843,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    LLM-as-a-Judge
+    Model-as-a-Judge
   
 
           </label>
@@ -1527,10 +1527,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#llmjudgedemoapplication" class="md-nav__link">
+  <a href="#modeljudgedemoapplication" class="md-nav__link">
     <span class="md-ellipsis">
       
-        LlmJudgeDemoApplication
+        ModelJudgeDemoApplication
       
     </span>
   </a>
@@ -1649,10 +1649,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#llmjudgedemoapplication" class="md-nav__link">
+  <a href="#modeljudgedemoapplication" class="md-nav__link">
     <span class="md-ellipsis">
       
-        LlmJudgeDemoApplication
+        ModelJudgeDemoApplication
       
     </span>
   </a>
@@ -1742,7 +1742,7 @@ takes <code>-pl examples</code> <strong>without</strong> <code>-am</code>.</p>
 <td><code>TYPESAFE_API_KEY</code></td>
 </tr>
 <tr>
-<td><a href="#llmjudgedemoapplication">LlmJudgeDemoApplication</a></td>
+<td><a href="#modeljudgedemoapplication">ModelJudgeDemoApplication</a></td>
 <td>the self-refine judge loop</td>
 <td>both keys</td>
 </tr>
@@ -1875,8 +1875,8 @@ with a signpost to help rather than a flat refusal.</p>
 text that is not a chat turn — a document about to be indexed, say — and shows the severity
 each request scored.</p>
 <p>See <a href="../guardrails/JevGuardrailAdvisor/">JevGuardrailAdvisor</a>.</p>
-<h2 id="llmjudgedemoapplication">LlmJudgeDemoApplication<a class="headerlink" href="#llmjudgedemoapplication" title="Permanent link">&para;</a></h2>
-<p>LLM-as-a-judge with Jev doing the judging. A Spring AI <code>ChatClient</code> backed by Anthropic
+<h2 id="modeljudgedemoapplication">ModelJudgeDemoApplication<a class="headerlink" href="#modeljudgedemoapplication" title="Permanent link">&para;</a></h2>
+<p>Model-as-a-judge with Jev doing the judging. A Spring AI <code>ChatClient</code> backed by Anthropic
 answers a weather question using a tool that returns an absurd temperature half the time.</p>
 <div class="highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">TYPESAFE_API_KEY</span><span class="o">=</span>...<span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>...
 </span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mvn<span class="w"> </span>-pl<span class="w"> </span>examples<span class="w"> </span>spring-boot:run
