@@ -40,6 +40,7 @@ String answer = chatClient.prompt("What is the weather in Paris?").call().conten
 | `maxRepeatAttempts(int)` | `int` | `3` | Retries after the first attempt. Capped at `MAX_REPEAT_ATTEMPTS_LIMIT` (100). |
 | `failOnExhaustedAttempts(boolean)` | `boolean` | `false` | Throw `JevSelfRefineFailedException` instead of returning the best effort. |
 | `skipEvaluationPredicate(BiPredicate<ChatClientRequest, ChatClientResponse>)` | — | skips when the response has tool calls | A tool call is not an answer yet, so there is nothing to judge. |
+| `judgeErrorPolicy(JudgeErrorPolicy)` | `JudgeErrorPolicy` | `FAIL_OPEN` | What to do when the judging call itself fails. See [when judging fails](#when-judging-fails). |
 | `order(int)` | `int` | `LOWEST_PRECEDENCE - 2000` | Where in the advisor chain this runs. |
 
 !!! note "Retry until it passes is not supported"
@@ -48,19 +49,38 @@ String answer = chatClient.prompt("What is the weather in Paris?").call().conten
 
 ## What the judge can see
 
-The judged state is the prompt on one side and the final answer on the other. Tool results
-are included when they are present in the prompt — a `ToolResponseMessage` is unpacked
-rather than dropped, since it carries no text of its own.
+The advisor builds a [`JevJudgeInput`](JevJudge.md#the-state-a-judge-builds) from the
+original request and the answer it produced:
+
+| Field | Carries |
+|---|---|
+| `user_question` | the system message and the user and assistant turns, each prefixed with its role |
+| `assistant_answer` | the final answer |
+| `tool_calls` | every tool call in the prompt, paired in order with its result: `{name, arguments, result}` |
+
+A `ToolResponseMessage` carries no text of its own, so its results are unpacked into
+`tool_calls` rather than dropped. Each result goes to the earliest open call with the same
+id, or with the same tool name when the provider leaves ids blank (as Google GenAI does), so
+parallel calls and ids reused across turns stay apart. Write a groundedness criterion
+against that field:
+
+```java
+.noul("is_grounded", Noul.builder()
+    .instructions("Is every value in `assistant_answer` supported by a result in `tool_calls`?")
+    .whenFalse("States a value no tool returned")
+    .build(), 0.7d)
+```
+
+Whether a tool was called at all is better settled by a
+[code check](JevJudge.md#code-criteria) than asked of Jev.
 
 !!! warning "Internal tool execution hides tool results"
     With Spring AI's default **internal** tool execution the model loop runs inside the
     `ChatModel`, and the intermediate `ToolResponseMessage`s never reach an advisor at all.
 
-    This matters when writing criteria. A groundedness question phrased as *"every claim
-    must trace back to the question"* will fail a correct tool-using answer, because the
-    value the tool returned legitimately appears nowhere in the question. Either phrase the
-    criterion against what is actually visible, or disable internal tool execution so the
-    tool messages land in the prompt.
+    Then `tool_calls` is absent, and a groundedness question against it has nothing to
+    check. Either phrase the criterion against what is actually visible, or disable internal
+    tool execution so the tool messages land in the prompt.
 
 ## Failing hard
 
@@ -82,6 +102,26 @@ catch (JevSelfRefineFailedException ex) {
     ex.verdict().failures().forEach(f -> log.error("  {}", f.detail()));
 }
 ```
+
+## When judging fails
+
+A TypeSafe outage, timeout or error response says nothing about the answer. By default the
+advisor **fails open**: it logs a warning and returns the response it could not judge,
+rather than failing a chat call whose answer may be fine. That matches its best-effort
+stance on exhausted attempts.
+
+Where an unjudged answer must never ship, fail closed instead. The `TypeSafeException` is
+then rethrown:
+
+```java
+JevSelfRefineAdvisor.builder()
+    .judge(judge)
+    .judgeErrorPolicy(JevSelfRefineAdvisor.JudgeErrorPolicy.FAIL_CLOSED)
+    .build();
+```
+
+Only failures of the judging call are covered. An exception thrown by one of the judge's
+code checks is a bug in the check, and always propagates.
 
 ## Ordering with the guardrail advisor
 

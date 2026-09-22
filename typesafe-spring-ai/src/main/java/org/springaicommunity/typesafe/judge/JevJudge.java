@@ -24,10 +24,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.TypeSafeClient;
+import org.springaicommunity.typesafe.judge.JevCriterion.CodeCriterion;
+import org.springaicommunity.typesafe.judge.JevCriterion.QuestionCriterion;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.NoulCriteria;
@@ -50,6 +53,11 @@ import org.springframework.util.Assert;
  * relevance, groundedness and plausibility can each be asked and thresholded separately
  * instead of being collapsed into one number by a judge model. Composing the pass
  * condition stays in Java, where it can be read and tested.
+ *
+ * <p>
+ * A criterion whose answer is already in the input — was a tool called, does the answer
+ * parse — is better declared as a {@link #check code check} than asked of Jev. Checks run
+ * locally before the call and land in the same verdict as the questions.
  *
  * <pre>{@code
  * JevJudge judge = JevJudge.builder(typeSafeClient)
@@ -75,11 +83,11 @@ import org.springframework.util.Assert;
  */
 public class JevJudge {
 
-	/** The state field carrying what was asked. */
-	public static final String QUESTION_FIELD = "user_question";
+	/** The state field carrying what was asked; see {@link JevJudgeInput#QUESTION_FIELD}. */
+	public static final String QUESTION_FIELD = JevJudgeInput.QUESTION_FIELD;
 
-	/** The state field carrying what the model replied. */
-	public static final String ANSWER_FIELD = "assistant_answer";
+	/** The state field carrying what the model replied; see {@link JevJudgeInput#ANSWER_FIELD}. */
+	public static final String ANSWER_FIELD = JevJudgeInput.ANSWER_FIELD;
 
 	private final TypeSafeClient typeSafeClient;
 
@@ -91,6 +99,8 @@ public class JevJudge {
 
 	private final Function<List<JevFinding>, String> feedbackRenderer;
 
+	private final boolean hasCodeCriteria;
+
 	private JevJudge(TypeSafeClient typeSafeClient, List<JevCriterion> criteria, double minConfidence,
 			boolean failOnInconclusive, Function<List<JevFinding>, String> feedbackRenderer) {
 		this.typeSafeClient = typeSafeClient;
@@ -98,6 +108,7 @@ public class JevJudge {
 		this.minConfidence = minConfidence;
 		this.failOnInconclusive = failOnInconclusive;
 		this.feedbackRenderer = feedbackRenderer;
+		this.hasCodeCriteria = this.criteria.stream().anyMatch(CodeCriterion.class::isInstance);
 	}
 
 	/**
@@ -107,32 +118,61 @@ public class JevJudge {
 	 * @return the verdict
 	 */
 	public JevVerdict judge(String question, String answer) {
-		Map<String, Object> state = new LinkedHashMap<>();
-		state.put(QUESTION_FIELD, question);
-		state.put(ANSWER_FIELD, answer);
-		return judge(JsonContent.of(state));
+		return judge(JevJudgeInput.builder().question(question).answer(answer).build());
+	}
+
+	/**
+	 * Judges a typed input. Its fields become the judged state under the names
+	 * {@link JevJudgeInput} documents, and code checks read it directly.
+	 * @param input the input to judge
+	 * @return the verdict
+	 */
+	public JevVerdict judge(JevJudgeInput input) {
+		Assert.notNull(input, "input must not be null");
+		return judge(input.toState(), input);
 	}
 
 	/**
 	 * Judges an arbitrary state. Use this when the thing under judgement is not a
-	 * question and answer pair, for example a retrieved passage or a tool result.
+	 * question and answer pair, for example a retrieved passage or a tool result. The
+	 * state is sent as given; code checks, if the judge has any, read it through
+	 * {@link JevJudgeInput#of(JsonContent)}, which requires a JSON object.
 	 * @param state the content to evaluate
 	 * @return the verdict
 	 */
 	public JevVerdict judge(JsonContent state) {
 		Assert.notNull(state, "state must not be null");
+		return judge(state, this.hasCodeCriteria ? JevJudgeInput.of(state) : null);
+	}
 
+	private JevVerdict judge(JsonContent state, @Nullable JevJudgeInput input) {
+		// Checks run before the call: they are free, and a check that throws is a bug that
+		// should surface without first spending a request.
+		Map<String, JevFinding> checked = new LinkedHashMap<>();
 		Map<String, Question> questions = new LinkedHashMap<>();
-		this.criteria.forEach(criterion -> questions.put(criterion.name(), criterion.question()));
+		for (JevCriterion criterion : this.criteria) {
+			if (criterion instanceof CodeCriterion code) {
+				Assert.state(input != null, "code criteria need an input to read");
+				checked.put(code.name(), evaluateCheck(code, input));
+			}
+			else if (criterion instanceof QuestionCriterion question) {
+				questions.put(question.name(), question.question());
+			}
+		}
 
 		SystemOneResponse response = this.typeSafeClient.systemOne(state, questions);
 
 		List<JevFinding> findings = new ArrayList<>();
 		for (JevCriterion criterion : this.criteria) {
-			// Read through the map rather than answer(), which throws. A partial response
-			// should degrade that one criterion the same way an unrecognised answer kind
-			// does, not abort the caller's whole chat call.
-			findings.add(evaluate(criterion, response.answers().get(criterion.name())));
+			if (criterion instanceof QuestionCriterion question) {
+				// Read through the map rather than answer(), which throws. A partial response
+				// should degrade that one criterion the same way an unrecognised answer kind
+				// does, not abort the caller's whole chat call.
+				findings.add(evaluate(question, response.answers().get(question.name())));
+			}
+			else {
+				findings.add(checked.get(criterion.name()));
+			}
 		}
 
 		boolean passed = findings.stream().noneMatch(JevFinding::isFailure);
@@ -157,7 +197,15 @@ public class JevJudge {
 		return String.format(Locale.ROOT, template, args);
 	}
 
-	private JevFinding evaluate(JevCriterion criterion, @Nullable Answer answer) {
+	private static JevFinding evaluateCheck(CodeCriterion criterion, JevJudgeInput input) {
+		if (criterion.check().test(input)) {
+			return new JevFinding(criterion, null, JevFinding.Outcome.PASSED, "");
+		}
+		return new JevFinding(criterion, null, JevFinding.Outcome.FAILED,
+				format("%s: %s", criterion.name(), criterion.defect()));
+	}
+
+	private JevFinding evaluate(QuestionCriterion criterion, @Nullable Answer answer) {
 		if (answer == null) {
 			return new JevFinding(criterion, new UnknownAnswer(null, Map.of()),
 					this.failOnInconclusive ? JevFinding.Outcome.FAILED : JevFinding.Outcome.INCONCLUSIVE,
@@ -176,7 +224,7 @@ public class JevJudge {
 				format("%s: the model returned an answer kind this SDK does not understand", criterion.name()));
 	}
 
-	private JevFinding evaluateNoul(JevCriterion criterion, NoulAnswer answer) {
+	private JevFinding evaluateNoul(QuestionCriterion criterion, NoulAnswer answer) {
 		if (answer.isTrue(criterion.minimum())) {
 			return new JevFinding(criterion, answer, JevFinding.Outcome.PASSED, "");
 		}
@@ -188,7 +236,7 @@ public class JevJudge {
 						criterion.minimum()));
 	}
 
-	private JevFinding evaluateScore(JevCriterion criterion, ScoreAnswer answer) {
+	private JevFinding evaluateScore(QuestionCriterion criterion, ScoreAnswer answer) {
 		JevFinding.Outcome inconclusive = checkConfidence(answer.confidence());
 		if (inconclusive != null) {
 			return new JevFinding(criterion, answer, inconclusive,
@@ -211,7 +259,7 @@ public class JevJudge {
 		return new JevFinding(criterion, answer, JevFinding.Outcome.FAILED, detail);
 	}
 
-	private JevFinding evaluateChoice(JevCriterion criterion, ChoiceAnswer answer) {
+	private JevFinding evaluateChoice(QuestionCriterion criterion, ChoiceAnswer answer) {
 		JevFinding.Outcome inconclusive = checkConfidence(answer.confidence());
 		if (inconclusive != null) {
 			return new JevFinding(criterion, answer, inconclusive,
@@ -237,7 +285,7 @@ public class JevJudge {
 		return this.failOnInconclusive ? JevFinding.Outcome.FAILED : JevFinding.Outcome.INCONCLUSIVE;
 	}
 
-	private String describeFalseSide(JevCriterion criterion) {
+	private String describeFalseSide(QuestionCriterion criterion) {
 		if (criterion.question() instanceof Noul noul) {
 			NoulCriteria criteria = noul.criteria();
 			if (criteria != null && criteria.whenFalse() != null) {
@@ -250,7 +298,7 @@ public class JevJudge {
 		return "the criterion was not met";
 	}
 
-	private int roundToLevel(JevCriterion criterion, double value) {
+	private int roundToLevel(QuestionCriterion criterion, double value) {
 		int level = (int) Math.round(value);
 		if (criterion.question() instanceof Score score) {
 			return Math.max(0, Math.min(level, score.maxLevel()));
@@ -263,7 +311,7 @@ public class JevJudge {
 	 * response echoes back, so the feedback speaks the vocabulary the rubric was written
 	 * in.
 	 */
-	private String describeLevel(JevCriterion criterion, ScoreAnswer answer, int level) {
+	private String describeLevel(QuestionCriterion criterion, ScoreAnswer answer, int level) {
 		if (criterion.question() instanceof Score score) {
 			JsonContent description = score.levelAt(level);
 			if (description != null) {
@@ -359,6 +407,25 @@ public class JevJudge {
 			return criterion(JevCriterion.choice(name, choice, acceptedOptions));
 		}
 
+		/**
+		 * Adds a check answered in code rather than by Jev. Use it for anything the input
+		 * already settles — whether a tool was called, whether the answer parses — so the
+		 * model is only asked what genuinely needs judgement.
+		 * @param name the name the finding will carry
+		 * @param check passes when it returns {@code true}
+		 * @param defect what went wrong when it returns {@code false}, handed back as
+		 * feedback
+		 * @return this builder
+		 */
+		public Builder check(String name, Predicate<JevJudgeInput> check, String defect) {
+			return criterion(JevCriterion.check(name, check, defect));
+		}
+
+		/**
+		 * Adds a pre-built criterion of either kind.
+		 * @param criterion the criterion
+		 * @return this builder
+		 */
 		public Builder criterion(JevCriterion criterion) {
 			Assert.notNull(criterion, "criterion must not be null");
 			Assert.isTrue(this.criteria.stream().noneMatch(existing -> existing.name().equals(criterion.name())),
@@ -405,6 +472,10 @@ public class JevJudge {
 
 		public JevJudge build() {
 			Assert.notEmpty(this.criteria, "a judge must declare at least one criterion");
+			// A judge of checks alone never needs Jev; it is a predicate, and would leave
+			// the verdict without a response to carry.
+			Assert.isTrue(this.criteria.stream().anyMatch(QuestionCriterion.class::isInstance),
+					"a judge must declare at least one question criterion; plain code checks need no judge");
 			return new JevJudge(this.typeSafeClient, this.criteria, this.minConfidence, this.failOnInconclusive,
 					this.feedbackRenderer);
 		}

@@ -19,13 +19,17 @@ package org.springaicommunity.typesafe.advisor;
 
 
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springaicommunity.typesafe.exception.TypeSafeException;
 import org.springaicommunity.typesafe.judge.JevJudge;
+import org.springaicommunity.typesafe.judge.JevJudgeInput;
 import org.springaicommunity.typesafe.judge.JevVerdict;
 import reactor.core.publisher.Flux;
 
@@ -36,6 +40,7 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisor;
 import org.springframework.ai.chat.client.advisor.api.StreamAdvisorChain;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -69,18 +74,27 @@ import org.springframework.util.StringUtils;
  *
  * <h3>What the judge can see</h3>
  *
- * The judged state is the prompt on one side and the final answer on the other. Tool
- * results are included when they are present in the prompt, but with Spring AI's default
- * <em>internal</em> tool execution the model loop runs inside the {@code ChatModel} and the
- * intermediate {@link ToolResponseMessage}s never reach an advisor at all — the advisor
- * sees the original prompt and the finished answer, and nothing in between.
+ * The judged state is a {@link JevJudgeInput}: the system message and the conversation as
+ * {@code user_question}, the final answer as {@code assistant_answer}, and any tool calls
+ * found in the prompt as {@code tool_calls} — each assistant tool call paired, in order, with
+ * the result its {@link ToolResponseMessage} carried: by id, or by tool name when the
+ * provider leaves the id blank. Write a groundedness criterion against
+ * {@code `tool_calls`}, since the value a tool returned legitimately appears nowhere in the
+ * question.
  *
  * <p>
- * This matters when writing criteria. A groundedness question phrased as "every claim must
- * trace back to the question" will fail a correct tool-using answer, because the value the
- * tool returned legitimately appears nowhere in the question. Either phrase such a
- * criterion against what is actually visible, or disable internal tool execution so the
- * tool messages land in the prompt.
+ * Tool calls only reach an advisor when they are in the prompt. With Spring AI's default
+ * internal tool execution the tool loop runs below the advisor chain, and this advisor sees
+ * the original prompt and the finished answer, with nothing in between. Place the advisor
+ * so that the tool messages are already in the prompt it receives, or phrase such criteria
+ * against what is actually visible.
+ *
+ * <h3>When judging itself fails</h3>
+ *
+ * A TypeSafe outage or timeout says nothing about the answer. By default the advisor
+ * {@linkplain JudgeErrorPolicy#FAIL_OPEN fails open}: it logs the error and returns the
+ * response it could not judge, rather than failing a chat call whose answer may be fine.
+ * Choose {@link JudgeErrorPolicy#FAIL_CLOSED} where an unjudged answer must never ship.
  *
  * @author Christian Tzolov
  */
@@ -113,14 +127,32 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 
 	private final BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate;
 
+	private final JudgeErrorPolicy judgeErrorPolicy;
+
+	/**
+	 * What to do when the judging call itself fails — the TypeSafe service is unreachable,
+	 * times out or answers with an error. Such a failure says nothing about the answer.
+	 */
+	public enum JudgeErrorPolicy {
+
+		/** Log the error and return the response that could not be judged. */
+		FAIL_OPEN,
+
+		/** Rethrow the error, failing the chat call. */
+		FAIL_CLOSED
+
+	}
+
 	private JevSelfRefineAdvisor(JevJudge judge, int advisorOrder, int maxRepeatAttempts,
 			boolean failOnExhaustedAttempts,
-			BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate) {
+			BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate,
+			JudgeErrorPolicy judgeErrorPolicy) {
 		this.judge = judge;
 		this.advisorOrder = advisorOrder;
 		this.maxRepeatAttempts = maxRepeatAttempts;
 		this.failOnExhaustedAttempts = failOnExhaustedAttempts;
 		this.skipEvaluationPredicate = skipEvaluationPredicate;
+		this.judgeErrorPolicy = judgeErrorPolicy;
 	}
 
 	@Override
@@ -156,7 +188,18 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 				return response;
 			}
 
-			JevVerdict verdict = this.judge.judge(getPromptQuestion(chatClientRequest), getAssistantAnswer(response));
+			JevVerdict verdict;
+			try {
+				verdict = this.judge.judge(judgeInput(chatClientRequest, response));
+			}
+			catch (TypeSafeException ex) {
+				if (this.judgeErrorPolicy == JudgeErrorPolicy.FAIL_CLOSED) {
+					throw ex;
+				}
+				logger.warn("Jev judgement could not be made on attempt {}, returning the response unjudged: {}",
+						attempt, ex.getMessage());
+				return response;
+			}
 
 			if (verdict.passed()) {
 				logger.info("Jev judgement passed on attempt {}: {}", attempt, verdict.summary());
@@ -187,18 +230,30 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	}
 
 	/**
+	 * Builds the judged input from the original request and the answer it produced. The
+	 * original request, not the feedback-augmented one, so the judge never sees its own
+	 * previous feedback as part of the question.
+	 */
+	private JevJudgeInput judgeInput(ChatClientRequest chatClientRequest, ChatClientResponse response) {
+		return JevJudgeInput.builder()
+			.question(getPromptQuestion(chatClientRequest))
+			.answer(getAssistantAnswer(response))
+			.toolCalls(getToolCalls(chatClientRequest))
+			.build();
+	}
+
+	/**
 	 * Flattens the system message and the conversation into the text handed to the judge
-	 * as {@code user_question}.
+	 * as {@code user_question}. Tool traffic is left out: it goes into {@code tool_calls}.
 	 */
 	private String getPromptQuestion(ChatClientRequest chatClientRequest) {
 		String conversation = chatClientRequest.prompt()
 			.getInstructions()
 			.stream()
 			.filter(message -> message.getMessageType() == MessageType.USER
-					|| message.getMessageType() == MessageType.ASSISTANT
-					|| message.getMessageType() == MessageType.TOOL)
-			.map(JevSelfRefineAdvisor::renderMessage)
-			.filter(StringUtils::hasText)
+					|| message.getMessageType() == MessageType.ASSISTANT)
+			.filter(message -> StringUtils.hasText(message.getText()))
+			.map(message -> message.getMessageType() + ":" + message.getText())
 			.collect(Collectors.joining(System.lineSeparator()));
 
 		SystemMessage systemMessage = chatClientRequest.prompt().getSystemMessage();
@@ -209,19 +264,68 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	}
 
 	/**
-	 * Renders one message for the judge. A {@link ToolResponseMessage} carries no text at
+	 * Pairs every tool call an assistant message made with the result its
+	 * {@link ToolResponseMessage} carried. A {@link ToolResponseMessage} carries no text at
 	 * all — its content is the tool results, which are exactly the evidence a groundedness
 	 * criterion has to be judged against — so those are unpacked rather than dropped.
+	 *
+	 * <p>
+	 * Pairing is positional, not a map lookup: some providers leave the id blank and others
+	 * reuse it across turns, and keying by id would collapse such calls into one and hand
+	 * it the wrong result. Each response goes to the earliest still-open call with the same
+	 * id, or with the same tool name when the id is blank. A response that matches no call
+	 * is kept with its tool name.
 	 */
-	private static String renderMessage(Message message) {
-		if (message instanceof ToolResponseMessage toolResponseMessage) {
-			return toolResponseMessage.getResponses()
-				.stream()
-				.map(response -> message.getMessageType() + ":" + response.name() + "=" + response.responseData())
-				.collect(Collectors.joining(System.lineSeparator()));
+	private static List<JevJudgeInput.ToolCall> getToolCalls(ChatClientRequest chatClientRequest) {
+		List<PendingToolCall> pending = new ArrayList<>();
+		List<JevJudgeInput.ToolCall> unmatched = new ArrayList<>();
+		for (Message message : chatClientRequest.prompt().getInstructions()) {
+			if (message instanceof AssistantMessage assistantMessage) {
+				assistantMessage.getToolCalls().forEach(call -> pending.add(new PendingToolCall(call)));
+			}
+			else if (message instanceof ToolResponseMessage toolResponseMessage) {
+				for (ToolResponseMessage.ToolResponse toolResponse : toolResponseMessage.getResponses()) {
+					PendingToolCall match = pending.stream()
+						.filter(call -> call.result == null && call.answeredBy(toolResponse))
+						.findFirst()
+						.orElse(null);
+					if (match != null) {
+						match.result = toolResponse.responseData();
+					}
+					else {
+						unmatched.add(new JevJudgeInput.ToolCall(toolResponse.name(), null, toolResponse.responseData()));
+					}
+				}
+			}
 		}
-		String text = message.getText();
-		return StringUtils.hasText(text) ? message.getMessageType() + ":" + text : "";
+
+		List<JevJudgeInput.ToolCall> toolCalls = new ArrayList<>(pending.size() + unmatched.size());
+		pending.forEach(call -> toolCalls
+			.add(new JevJudgeInput.ToolCall(call.call.name(), call.call.arguments(), call.result)));
+		toolCalls.addAll(unmatched);
+		return toolCalls;
+	}
+
+	/**
+	 * A tool call waiting for its result while the prompt is walked.
+	 */
+	private static final class PendingToolCall {
+
+		private final AssistantMessage.ToolCall call;
+
+		private @Nullable String result;
+
+		private PendingToolCall(AssistantMessage.ToolCall call) {
+			this.call = call;
+		}
+
+		private boolean answeredBy(ToolResponseMessage.ToolResponse response) {
+			if (StringUtils.hasText(this.call.id())) {
+				return this.call.id().equals(response.id());
+			}
+			return !StringUtils.hasText(response.id()) && this.call.name().equals(response.name());
+		}
+
 	}
 
 	private String getAssistantAnswer(ChatClientResponse chatClientResponse) {
@@ -268,6 +372,8 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 
 		private BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate = (request,
 				response) -> response.chatResponse() == null || response.chatResponse().hasToolCalls();
+
+		private JudgeErrorPolicy judgeErrorPolicy = JudgeErrorPolicy.FAIL_OPEN;
 
 		private Builder() {
 		}
@@ -320,10 +426,23 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 			return this;
 		}
 
+		/**
+		 * What to do when the judging call itself fails. {@link JudgeErrorPolicy#FAIL_OPEN}
+		 * by default, matching the advisor's best-effort stance: a TypeSafe outage says
+		 * nothing about the answer, so it should not fail the chat call.
+		 * @param judgeErrorPolicy the policy
+		 * @return this builder
+		 */
+		public Builder judgeErrorPolicy(JudgeErrorPolicy judgeErrorPolicy) {
+			Assert.notNull(judgeErrorPolicy, "judgeErrorPolicy must not be null");
+			this.judgeErrorPolicy = judgeErrorPolicy;
+			return this;
+		}
+
 		public JevSelfRefineAdvisor build() {
 			Assert.notNull(this.judge, "judge must be set");
 			return new JevSelfRefineAdvisor(this.judge, this.advisorOrder, this.maxRepeatAttempts,
-					this.failOnExhaustedAttempts, this.skipEvaluationPredicate);
+					this.failOnExhaustedAttempts, this.skipEvaluationPredicate, this.judgeErrorPolicy);
 		}
 
 	}

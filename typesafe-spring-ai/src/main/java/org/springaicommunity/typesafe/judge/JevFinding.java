@@ -18,19 +18,21 @@ package org.springaicommunity.typesafe.judge;
 
 
 
+import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.response.Answer;
 
 /**
  * What one {@link JevCriterion} concluded about a response.
  *
  * @param criterion the criterion that was checked
- * @param answer the JEV model's answer
+ * @param answer the Jev model's answer; {@code null} for a
+ * {@link JevCriterion.CodeCriterion}, which is answered in code
  * @param outcome whether the criterion passed, failed or could not be decided
  * @param detail a sentence naming the defect, ready to be handed back to the model as
  * feedback; empty when the criterion passed
  * @author Christian Tzolov
  */
-public record JevFinding(JevCriterion criterion, Answer answer, Outcome outcome, String detail) {
+public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcome outcome, String detail) {
 
 	/**
 	 * @return the name of the criterion

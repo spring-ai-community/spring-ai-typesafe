@@ -6,14 +6,17 @@ its own threshold.
 
 ## What it does
 
-A judge holds a list of criteria. Each is a [primitive](../concepts/primitives.md) plus what
+A judge holds a list of criteria. Most are a [primitive](../concepts/primitives.md) plus what
 counts as passing it:
 
 - a **noul** passes when its truth value reaches a minimum
 - a **score** passes when it reaches a level on your rubric
 - a **choice** passes when the selected label is one you accept
 
-`judge(...)` sends them all in one request and returns a `JevVerdict`: whether everything
+The rest are [**code checks**](#code-criteria): plain Java predicates for anything the input
+already settles, such as whether a tool was called. They never reach Jev.
+
+`judge(...)` sends every question in one request and returns a `JevVerdict`: whether everything
 passed, a finding per criterion, the raw response, and feedback synthesised from the
 criteria that did not.
 
@@ -30,6 +33,7 @@ classDiagram
         +noul(String, Noul, double) Builder
         +score(String, Score, double) Builder
         +choice(String, Choice, String[]) Builder
+        +check(String, Predicate~JevJudgeInput~, String) Builder
         +criterion(JevCriterion) Builder
         +minConfidence(double) Builder
         +failOnInconclusive(boolean) Builder
@@ -40,17 +44,30 @@ classDiagram
         +String QUESTION_FIELD$
         +String ANSWER_FIELD$
         +judge(String, String) JevVerdict
+        +judge(JevJudgeInput) JevVerdict
         +judge(JsonContent) JevVerdict
         +criteria() List~JevCriterion~
         +builder(TypeSafeClient)$ Builder
     }
 
     class JevCriterion {
+        <<sealed interface>>
+        +name() String
+    }
+
+    class QuestionCriterion {
         <<record>>
         +String name
         +Question question
         +double minimum
         +Set~String~ acceptedOptions
+    }
+
+    class CodeCriterion {
+        <<record>>
+        +String name
+        +Predicate~JevJudgeInput~ check
+        +String defect
     }
 
     class Question {
@@ -59,14 +76,16 @@ classDiagram
 
     Builder ..> JevJudge : builds
     JevJudge "1" *-- "1..*" JevCriterion : holds
-    JevCriterion --> Question : the primitive asked
+    JevCriterion <|.. QuestionCriterion
+    JevCriterion <|.. CodeCriterion
+    QuestionCriterion --> Question : the primitive asked
 
     note for Question "permits Noul, Choice, Score"
 ```
 
 The shape to take from this: a judge is **a list of criteria and nothing else**. It holds a
 `TypeSafeClient` and spends exactly one call per `judge(...)`, whatever the number of
-criteria — see [what comes back](#reading-the-verdict) for the other half.
+criteria. Code checks run locally and add nothing to that — see [what comes back](#reading-the-verdict) for the other half.
 
 ## How JevJudge, the advisor and the evaluator fit together
 
@@ -150,8 +169,32 @@ if (!verdict.passed()) {
 { "user_question": "...", "assistant_answer": "..." }
 ```
 
-Those field names are `JevJudge.QUESTION_FIELD` and `JevJudge.ANSWER_FIELD` — write your
-instructions against them, as the example above does.
+When there is more to judge against, build a `JevJudgeInput`. Its fields become the state
+under fixed names, the same wherever a judge is used, so write your instructions against
+them:
+
+| Builder method | State field | Shape |
+|---|---|---|
+| `question(String)` | `user_question` | string |
+| `answer(String)` | `assistant_answer` | string |
+| `expected(Object)` | `expected_output` | any JSON value: the reference to judge against |
+| `context(String)` / `context(List<String>)` | `supporting_context` | array, one entry per document |
+| `toolCall(ToolCall)` / `toolCalls(List<ToolCall>)` | `tool_calls` | array of `{name, arguments, result}` |
+| `field(String, Object)` | the name you give | anything else |
+
+```java
+JevVerdict verdict = judge.judge(JevJudgeInput.builder()
+        .question("Will I need an umbrella in Dublin tomorrow?")
+        .answer(answer)
+        .expected("Rain is likely; bring an umbrella.")
+        .field("search_required", true)
+        .toolCalls(toolCalls)
+        .build());
+```
+
+Empty context and tool-call lists are left out rather than sent as empty arrays, so a
+criterion can tell "no evidence" from "evidence that says nothing". The constants live on
+`JevJudgeInput` (`QUESTION_FIELD`, `EXPECTED_FIELD`, `TOOL_CALLS_FIELD`, ...).
 
 For anything that is not a question-and-answer pair, pass the state yourself:
 
@@ -161,6 +204,43 @@ JevVerdict verdict = judge.judge(JsonContent.of(Map.of(
         "claim",   claimUnderTest)));
 ```
 
+## Code criteria
+
+Some criteria need no model, because the answer is already in the input: whether the agent
+searched when it had to, whether the answer parses, whether it matches the expected output
+exactly. Declare those as **checks**:
+
+```java
+JevJudge judge = JevJudge.builder(typeSafeClient)
+    .check("matches_search_expectation",
+           input -> !input.toolCalls().isEmpty()
+                   == Boolean.TRUE.equals(input.field("search_required", Boolean.class)),
+           "searched when no search was required, or skipped a required search")
+    .noul("is_grounded", groundedNoul, 0.7d)
+    .build();
+```
+
+A check is a `Predicate<JevJudgeInput>` plus the defect to report when it returns `false`.
+
+- **It never reaches Jev.** Checks run locally before the call. Only the questions are
+  sent, still in one request.
+- **It lands in the same verdict.** A failed check is a `FAILED` finding: it fails the
+  verdict, its defect goes into the feedback and it shows in `summary()`. Its `answer` is
+  `null`, since there is no model answer.
+- **A check that throws is a bug, not a verdict.** The exception propagates out of
+  `judge(...)` before any request is made.
+- **A judge needs at least one question.** A judge of checks alone would be a plain
+  predicate.
+
+`judge(JsonContent)` works with checks too. They read the state through
+`JevJudgeInput.of(state)` and its `field(name, type)` reader, which requires the state to be
+a JSON object.
+
+!!! tip "Do not ask a model a question code can answer"
+    Reproducing LangChain's jev-as-a-judge benchmark, the single wrong judgement out of
+    fifteen was a question a one-line comparison settles exactly. Moving it into a check
+    raised accuracy from 0.8 to 1.0 and lowered variance.
+
 ## Builder Configuration
 
 | Builder method | Type | Default | Description |
@@ -168,12 +248,14 @@ JevVerdict verdict = judge.judge(JsonContent.of(Map.of(
 | `noul(String, Noul, double)` | — | — | A criterion passing at or above a truth value. |
 | `score(String, Score, double)` | — | — | A criterion passing at or above a rubric level. |
 | `choice(String, Choice, String...)` | — | — | A criterion passing when the label is accepted. Validates the labels exist on the choice. |
-| `criterion(JevCriterion)` | — | — | Add a pre-built criterion. |
+| `check(String, Predicate<JevJudgeInput>, String)` | — | — | A [code check](#code-criteria): passes when the predicate returns `true`, otherwise reports the defect. |
+| `criterion(JevCriterion)` | — | — | Add a pre-built criterion of either kind. |
 | `minConfidence(double)` | `double` | `0.5` | Below this, a choice or score is `INCONCLUSIVE`. Nouls carry no confidence and are unaffected. |
 | `failOnInconclusive(boolean)` | `boolean` | `false` | Treat an undecided criterion as a failure. |
 | `feedbackRenderer(Function<List<JevFinding>, String>)` | — | `JevJudge::defaultFeedback` | Replace the wording fed back to the model. |
 
-Criterion names must be unique, and a judge needs at least one.
+Criterion names must be unique across both kinds, and a judge needs at least one question
+criterion.
 
 ## Reading the verdict
 
@@ -235,8 +317,9 @@ public record JevVerdict(boolean passed, List<JevFinding> findings,
 }
 ```
 
-Each `JevFinding` carries its criterion, the raw answer, an `Outcome` of `PASSED`, `FAILED`
-or `INCONCLUSIVE`, and a `detail` sentence ready to hand back to a model.
+Each `JevFinding` carries its criterion, the raw answer (`null` for a code check), an
+`Outcome` of `PASSED`, `FAILED` or `INCONCLUSIVE`, and a `detail` sentence ready to hand back
+to a model.
 
 ```java
 verdict.failures().forEach(finding ->

@@ -19,10 +19,10 @@ package org.springaicommunity.typesafe.judge;
 
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
-import org.springaicommunity.typesafe.JsonContent;
-
+import org.springframework.ai.document.Document;
 import org.springframework.ai.evaluation.EvaluationRequest;
 import org.springframework.ai.evaluation.EvaluationResponse;
 import org.springframework.ai.evaluation.Evaluator;
@@ -63,8 +63,11 @@ public class JevEvaluator implements Evaluator {
 	/** Metadata key holding a per-criterion outcome map. */
 	public static final String FINDINGS_METADATA_KEY = "jevFindings";
 
-	/** The state field carrying the supporting documents, when the request has any. */
-	public static final String CONTEXT_FIELD = "supporting_context";
+	/**
+	 * The state field carrying the supporting documents, one entry per document, when the
+	 * request has any; see {@link JevJudgeInput#CONTEXT_FIELD}.
+	 */
+	public static final String CONTEXT_FIELD = JevJudgeInput.CONTEXT_FIELD;
 
 	private final JevJudge judge;
 
@@ -80,19 +83,21 @@ public class JevEvaluator implements Evaluator {
 	public EvaluationResponse evaluate(EvaluationRequest evaluationRequest) {
 		Assert.notNull(evaluationRequest, "evaluationRequest must not be null");
 
-		Map<String, Object> state = new LinkedHashMap<>();
-		state.put(JevJudge.QUESTION_FIELD, evaluationRequest.getUserText());
-		state.put(JevJudge.ANSWER_FIELD, evaluationRequest.getResponseContent());
-
 		// Retrieved documents are the evidence a groundedness criterion needs, so they go
-		// into the judged state as their own field rather than being flattened into the
-		// question.
-		String context = doGetSupportingData(evaluationRequest);
-		if (StringUtils.hasText(context)) {
-			state.put(CONTEXT_FIELD, context);
-		}
+		// into the judged state as their own field, one entry per document, rather than
+		// being flattened into the question.
+		List<String> context = evaluationRequest.getDataList() == null ? List.of()
+				: evaluationRequest.getDataList()
+					.stream()
+					.map(Document::getText)
+					.filter(StringUtils::hasText)
+					.toList();
 
-		JevVerdict verdict = this.judge.judge(JsonContent.of(state));
+		JevVerdict verdict = this.judge.judge(JevJudgeInput.builder()
+			.question(evaluationRequest.getUserText())
+			.answer(evaluationRequest.getResponseContent())
+			.context(context)
+			.build());
 
 		Map<String, Object> metadata = new LinkedHashMap<>();
 		metadata.put(VERDICT_METADATA_KEY, verdict);

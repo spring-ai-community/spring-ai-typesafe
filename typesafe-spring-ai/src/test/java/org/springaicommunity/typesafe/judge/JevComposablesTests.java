@@ -175,8 +175,7 @@ class JevComposablesTests {
 		// state rather than being dropped on the floor.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
-			.andExpect(jsonPath("$.state." + JevEvaluator.CONTEXT_FIELD)
-				.value(org.hamcrest.Matchers.containsString("Paris is in France")))
+			.andExpect(jsonPath("$.state." + JevEvaluator.CONTEXT_FIELD + "[0]").value("Paris is in France."))
 			.andRespond(MockTypeSafeServer.jsonResponse("""
 					{"model":"jev-1.13.0","answers":{
 					  "is_plausible":{"type":"noul","noul":0.99},

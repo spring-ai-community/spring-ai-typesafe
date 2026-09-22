@@ -22,13 +22,16 @@ package org.springaicommunity.typesafe.judge;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.MockTypeSafeServer;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 
 /**
@@ -53,6 +56,9 @@ class JevJudgeTests {
 		.whenTrue("Every value is physically possible")
 		.whenFalse("Contains an impossible or absurd value")
 		.build();
+
+	private static final String PLAUSIBLE_ONLY = """
+			{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.95}},"usage":{}}""";
 
 	private final MockTypeSafeServer mock = MockTypeSafeServer.create();
 
@@ -268,7 +274,7 @@ class JevJudgeTests {
 		// run, which would make the feedback text differ between runs.
 		Choice tone = Choice.of("What tone?", "helpful", "neutral", "dismissive");
 
-		JevCriterion criterion = JevCriterion.choice("tone", tone, "helpful", "neutral", "helpful");
+		JevCriterion.QuestionCriterion criterion = JevCriterion.choice("tone", tone, "helpful", "neutral", "helpful");
 
 		assertThat(criterion.acceptedOptions()).containsExactly("helpful", "neutral");
 	}
@@ -306,6 +312,128 @@ class JevJudgeTests {
 				assertThat(finding.outcome()).isEqualTo(JevFinding.Outcome.INCONCLUSIVE);
 				assertThat(finding.detail()).contains("returned no answer");
 			});
+	}
+
+	@Test
+	void failsACodeCheckAndQuotesItsDefectAlongsideTheQuestions() {
+		// The check is answered in code, but it must land in the same verdict: it fails
+		// the verdict, reaches the feedback and shows in the summary like a question does.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.questions.searched").doesNotExist())
+			.andExpect(jsonPath("$.questions.is_plausible.type").value("noul"))
+			.andRespond(MockTypeSafeServer.jsonResponse(PLAUSIBLE_ONLY));
+
+		JevVerdict verdict = searchJudge().judge(JevJudgeInput.builder().question("Weather in Dublin?")
+			.answer("No rain expected.")
+			.field("search_required", true)
+			.build());
+
+		assertThat(verdict.passed()).isFalse();
+		assertThat(verdict.summary()).isEqualTo("passed=false [searched=FAILED, is_plausible=PASSED]");
+		assertThat(verdict.failures()).singleElement().satisfies(finding -> {
+			assertThat(finding.criterion()).isInstanceOf(JevCriterion.CodeCriterion.class);
+			assertThat(finding.answer()).isNull();
+		});
+		assertThat(verdict.feedback()).isEqualTo("- searched: a required search was skipped");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void passesACodeCheckThatHolds() {
+		respondWith(PLAUSIBLE_ONLY);
+
+		JevVerdict verdict = searchJudge().judge(JevJudgeInput.builder()
+			.question("Weather in Dublin?")
+			.answer("Rain, 12C.")
+			.field("search_required", true)
+			.toolCall(new JevJudgeInput.ToolCall("web_search", "{\"q\":\"Dublin\"}", "Rain, 12C"))
+			.build());
+
+		assertThat(verdict.passed()).isTrue();
+		assertThat(verdict.findings()).extracting(JevFinding::outcome)
+			.containsExactly(JevFinding.Outcome.PASSED, JevFinding.Outcome.PASSED);
+	}
+
+	@Test
+	void letsACheckThatThrowsPropagateWithoutSpendingACall() {
+		// A throwing check is a bug in the check, not a verdict on the answer.
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.check("broken", input -> {
+				throw new IllegalStateException("boom");
+			}, "never")
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.build();
+
+		assertThatExceptionOfType(IllegalStateException.class).isThrownBy(() -> judge.judge("q", "a"))
+			.withMessage("boom");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void readsAnArbitraryStateThroughTheInputForCodeChecks() {
+		respondWith(PLAUSIBLE_ONLY);
+
+		JevVerdict verdict = searchJudge().judge(JsonContent.of(Map.of("search_required", false)));
+
+		assertThat(verdict.passed()).isTrue();
+	}
+
+	@Test
+	void rejectsANonObjectStateWhenTheJudgeHasCodeChecks() {
+		assertThatIllegalArgumentException().isThrownBy(() -> searchJudge().judge(JsonContent.of("plain text")))
+			.withMessageContaining("JSON object");
+	}
+
+	@Test
+	void rejectsAJudgeOfCodeChecksAlone() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> JevJudge.builder(this.mock.client()).check("always", input -> true, "never").build())
+			.withMessageContaining("at least one question criterion");
+	}
+
+	@Test
+	void rejectsACheckNamedLikeAQuestion() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> JevJudge.builder(this.mock.client())
+				.noul("is_plausible", PLAUSIBLE, 0.7d)
+				.check("is_plausible", input -> true, "never"))
+			.withMessageContaining("already declared");
+	}
+
+	@Test
+	void sendsEveryTypedInputFieldUnderItsDocumentedName() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.user_question").value("Weather in Paris?"))
+			.andExpect(jsonPath("$.state.assistant_answer").value("15C"))
+			.andExpect(jsonPath("$.state.expected_output.search_required").value(true))
+			.andExpect(jsonPath("$.state.supporting_context[0]").value("Paris is mild in spring."))
+			.andExpect(jsonPath("$.state.tool_calls[0].name").value("currentWeather"))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value("15"))
+			.andRespond(MockTypeSafeServer.jsonResponse(PLAUSIBLE_ONLY));
+
+		JevJudge.builder(this.mock.client())
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.build()
+			.judge(JevJudgeInput.builder()
+				.question("Weather in Paris?")
+				.answer("15C")
+				.expected(Map.of("search_required", true))
+				.context("Paris is mild in spring.")
+				.toolCall(new JevJudgeInput.ToolCall("currentWeather", "{}", "15"))
+				.build());
+
+		this.mock.server().verify();
+	}
+
+	private JevJudge searchJudge() {
+		return JevJudge.builder(this.mock.client())
+			.check("searched",
+					input -> input.toolCalls().isEmpty() != Boolean.TRUE.equals(input.field("search_required", Boolean.class)),
+					"a required search was skipped")
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.build();
 	}
 
 	private JevJudge judge() {

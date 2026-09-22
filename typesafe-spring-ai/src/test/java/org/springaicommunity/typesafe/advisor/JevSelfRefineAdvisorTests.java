@@ -25,11 +25,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springaicommunity.typesafe.MockTypeSafeServer;
 import org.springaicommunity.typesafe.ScriptedChatModel;
+import org.springaicommunity.typesafe.exception.TypeSafeException;
 import org.springaicommunity.typesafe.judge.JevJudge;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -37,6 +39,7 @@ import org.springframework.test.web.client.ExpectedCount;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 
 /**
@@ -239,17 +242,23 @@ class JevSelfRefineAdvisorTests {
 	}
 
 	@Test
-	void handsToolResultsToTheJudgeRatherThanDroppingThem() {
+	void handsToolCallsToTheJudgeAsTheirOwnField() {
 		// A ToolResponseMessage carries no text, so it has to be unpacked. Without this the
 		// tool's output never reaches the judge and a groundedness criterion has nothing to
-		// check the answer against.
+		// check the answer against. The call and its result are paired by id.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
-			.andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers
-				.jsonPath("$.state.user_question")
-				.value(org.hamcrest.Matchers.containsString("currentWeather=15")))
+			.andExpect(jsonPath("$.state.tool_calls[0].name").value("currentWeather"))
+			.andExpect(jsonPath("$.state.tool_calls[0].arguments").value("{\"city\":\"Paris\"}"))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value("15"))
+			.andExpect(jsonPath("$.state.user_question")
+				.value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("currentWeather"))))
 			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
 
+		AssistantMessage toolCall = AssistantMessage.builder()
+			.toolCalls(List.of(new AssistantMessage.ToolCall("call_1", "function", "currentWeather",
+					"{\"city\":\"Paris\"}")))
+			.build();
 		ToolResponseMessage toolResponse = ToolResponseMessage.builder()
 			.responses(List.of(new ToolResponseMessage.ToolResponse("call_1", "currentWeather", "15")))
 			.build();
@@ -257,10 +266,107 @@ class JevSelfRefineAdvisorTests {
 		ChatClient.builder(new ScriptedChatModel("It is 15 degrees Celsius in Paris."))
 			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge()).maxRepeatAttempts(1).build())
 			.build()
-			.prompt(new Prompt(List.of(new UserMessage("What is the weather in Paris?"), toolResponse)))
+			.prompt(new Prompt(List.of(new UserMessage("What is the weather in Paris?"), toolCall, toolResponse)))
 			.call()
 			.content();
 
+		this.mock.server().verify();
+	}
+
+	@Test
+	void keepsParallelToolCallsApartWhenTheProviderLeavesIdsBlank() {
+		// Some providers (Google GenAI) send every tool call with an empty id. Keyed by id,
+		// the two calls would collapse into one carrying the wrong result.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.tool_calls.length()").value(2))
+			.andExpect(jsonPath("$.state.tool_calls[0].name").value("currentWeather"))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value("15"))
+			.andExpect(jsonPath("$.state.tool_calls[1].name").value("localTime"))
+			.andExpect(jsonPath("$.state.tool_calls[1].result").value("14:00"))
+			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
+
+		AssistantMessage toolCalls = AssistantMessage.builder()
+			.toolCalls(List.of(new AssistantMessage.ToolCall("", "function", "currentWeather", "{}"),
+					new AssistantMessage.ToolCall("", "function", "localTime", "{}")))
+			.build();
+		ToolResponseMessage toolResponses = ToolResponseMessage.builder()
+			.responses(List.of(new ToolResponseMessage.ToolResponse("", "localTime", "14:00"),
+					new ToolResponseMessage.ToolResponse("", "currentWeather", "15")))
+			.build();
+
+		judgeOnce(List.of(new UserMessage("Weather and time in Paris?"), toolCalls, toolResponses));
+	}
+
+	@Test
+	void pairsAnIdReusedAcrossTurnsWithTheResultOfItsOwnTurn() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.tool_calls.length()").value(2))
+			.andExpect(jsonPath("$.state.tool_calls[0].arguments").value("{\"city\":\"Paris\"}"))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value("15"))
+			.andExpect(jsonPath("$.state.tool_calls[1].arguments").value("{\"city\":\"Oslo\"}"))
+			.andExpect(jsonPath("$.state.tool_calls[1].result").value("3"))
+			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
+
+		judgeOnce(List.of(new UserMessage("Weather in Paris, then Oslo?"),
+				AssistantMessage.builder()
+					.toolCalls(List.of(new AssistantMessage.ToolCall("call_0", "function", "currentWeather",
+							"{\"city\":\"Paris\"}")))
+					.build(),
+				ToolResponseMessage.builder()
+					.responses(List.of(new ToolResponseMessage.ToolResponse("call_0", "currentWeather", "15")))
+					.build(),
+				AssistantMessage.builder()
+					.toolCalls(List.of(new AssistantMessage.ToolCall("call_0", "function", "currentWeather",
+							"{\"city\":\"Oslo\"}")))
+					.build(),
+				ToolResponseMessage.builder()
+					.responses(List.of(new ToolResponseMessage.ToolResponse("call_0", "currentWeather", "3")))
+					.build()));
+	}
+
+	private void judgeOnce(List<org.springframework.ai.chat.messages.Message> messages) {
+		ChatClient.builder(new ScriptedChatModel("It is 15 degrees Celsius in Paris."))
+			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge()).maxRepeatAttempts(1).build())
+			.build()
+			.prompt(new Prompt(messages))
+			.call()
+			.content();
+
+		this.mock.server().verify();
+	}
+
+	@Test
+	void returnsTheAnswerUnjudgedWhenJudgingFails() {
+		// An outage says nothing about the answer, so by default it must not fail the call.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.errorResponse(422, "malformed question"));
+		ScriptedChatModel chatModel = new ScriptedChatModel("It is 15 degrees Celsius in Paris.");
+
+		String content = chatClient(chatModel, 3).prompt("What is the weather in Paris?").call().content();
+
+		assertThat(content).isEqualTo("It is 15 degrees Celsius in Paris.");
+		assertThat(chatModel.callCount()).isEqualTo(1);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void canBeConfiguredToFailWhenJudgingFails() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.errorResponse(422, "malformed question"));
+
+		ChatClient chatClient = ChatClient.builder(new ScriptedChatModel("It is 15 degrees Celsius in Paris."))
+			.defaultAdvisors(JevSelfRefineAdvisor.builder()
+				.judge(judge())
+				.judgeErrorPolicy(JevSelfRefineAdvisor.JudgeErrorPolicy.FAIL_CLOSED)
+				.build())
+			.build();
+
+		assertThatExceptionOfType(TypeSafeException.class)
+			.isThrownBy(() -> chatClient.prompt("What is the weather in Paris?").call().content());
 		this.mock.server().verify();
 	}
 
