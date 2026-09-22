@@ -20,6 +20,8 @@ package org.springaicommunity.typesafe.judge;
 
 import java.util.List;
 
+import org.jspecify.annotations.Nullable;
+
 import org.springaicommunity.typesafe.response.SystemOneResponse;
 
 /**
@@ -34,11 +36,13 @@ import org.springaicommunity.typesafe.response.SystemOneResponse;
  * @param passed whether every criterion was met
  * @param findings one finding per criterion, in declaration order
  * @param response the raw response, kept so callers can read probabilities, confidence,
- * usage and the request id
+ * usage and the request id; {@code null} when no question was asked — every question
+ * criterion was not applicable, or {@code failFast} skipped the call
  * @param feedback the defects as text, empty when the verdict passed
  * @author Christian Tzolov
  */
-public record JevVerdict(boolean passed, List<JevFinding> findings, SystemOneResponse response, String feedback) {
+public record JevVerdict(boolean passed, List<JevFinding> findings, @Nullable SystemOneResponse response,
+		String feedback) {
 
 	public JevVerdict {
 		findings = List.copyOf(findings);
@@ -57,6 +61,22 @@ public record JevVerdict(boolean passed, List<JevFinding> findings, SystemOneRes
 	public List<JevFinding> inconclusive() {
 		return this.findings.stream()
 			.filter(finding -> finding.outcome() == JevFinding.Outcome.INCONCLUSIVE)
+			.toList();
+	}
+
+	/**
+	 * @return the findings the service could not answer
+	 */
+	public List<JevFinding> errors() {
+		return this.findings.stream().filter(finding -> finding.outcome() == JevFinding.Outcome.ERROR).toList();
+	}
+
+	/**
+	 * @return the findings that were not asked
+	 */
+	public List<JevFinding> notApplicable() {
+		return this.findings.stream()
+			.filter(finding -> finding.outcome() == JevFinding.Outcome.NOT_APPLICABLE)
 			.toList();
 	}
 

@@ -207,7 +207,6 @@ class JevJudgeIT {
 		return JevJudge.builder(this.client)
 			.score("helpfulness", HELPFULNESS, 2.0d)
 			.noul("is_plausible", PLAUSIBLE, 0.7d)
-			.minConfidence(0.5d)
 			.build();
 	}
 

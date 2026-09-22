@@ -83,6 +83,13 @@ import org.springframework.util.Assert;
  */
 public class JevJudge {
 
+	/**
+	 * The default {@code minConfidence}: a clear majority, 60%, of a score's or choice's
+	 * probability has to support the verdict before it is acted on. A coin flip between
+	 * pass and fail supports it at 50%.
+	 */
+	public static final double DEFAULT_MIN_CONFIDENCE = 0.6d;
+
 	/** The state field carrying what was asked; see {@link JevJudgeInput#QUESTION_FIELD}. */
 	public static final String QUESTION_FIELD = JevJudgeInput.QUESTION_FIELD;
 
@@ -97,18 +104,28 @@ public class JevJudge {
 
 	private final boolean failOnInconclusive;
 
+	private final boolean failOnError;
+
+	private final boolean failFast;
+
 	private final Function<List<JevFinding>, String> feedbackRenderer;
 
-	private final boolean hasCodeCriteria;
+	/** Whether any criterion reads the input, so a raw state must be wrapped for it. */
+	private final boolean needsInput;
 
 	private JevJudge(TypeSafeClient typeSafeClient, List<JevCriterion> criteria, double minConfidence,
-			boolean failOnInconclusive, Function<List<JevFinding>, String> feedbackRenderer) {
+			boolean failOnInconclusive, boolean failOnError, boolean failFast,
+			Function<List<JevFinding>, String> feedbackRenderer) {
 		this.typeSafeClient = typeSafeClient;
 		this.criteria = List.copyOf(criteria);
 		this.minConfidence = minConfidence;
 		this.failOnInconclusive = failOnInconclusive;
+		this.failOnError = failOnError;
+		this.failFast = failFast;
 		this.feedbackRenderer = feedbackRenderer;
-		this.hasCodeCriteria = this.criteria.stream().anyMatch(CodeCriterion.class::isInstance);
+		this.needsInput = this.criteria.stream()
+			.anyMatch(criterion -> criterion instanceof CodeCriterion
+					|| (criterion instanceof QuestionCriterion question && question.appliesWhen() != null));
 	}
 
 	/**
@@ -135,50 +152,72 @@ public class JevJudge {
 	/**
 	 * Judges an arbitrary state. Use this when the thing under judgement is not a
 	 * question and answer pair, for example a retrieved passage or a tool result. The
-	 * state is sent as given; code checks, if the judge has any, read it through
-	 * {@link JevJudgeInput#of(JsonContent)}, which requires a JSON object.
+	 * state is sent as given; code checks and {@code appliesWhen} predicates, if the judge
+	 * has any, read it through {@link JevJudgeInput#of(JsonContent)}, which requires a JSON
+	 * object.
 	 * @param state the content to evaluate
 	 * @return the verdict
 	 */
 	public JevVerdict judge(JsonContent state) {
 		Assert.notNull(state, "state must not be null");
-		return judge(state, this.hasCodeCriteria ? JevJudgeInput.of(state) : null);
+		return judge(state, this.needsInput ? JevJudgeInput.of(state) : null);
 	}
 
 	private JevVerdict judge(JsonContent state, @Nullable JevJudgeInput input) {
 		// Checks run before the call: they are free, and a check that throws is a bug that
 		// should surface without first spending a request.
-		Map<String, JevFinding> checked = new LinkedHashMap<>();
-		Map<String, Question> questions = new LinkedHashMap<>();
+		Map<String, JevFinding> decided = new LinkedHashMap<>();
 		for (JevCriterion criterion : this.criteria) {
 			if (criterion instanceof CodeCriterion code) {
 				Assert.state(input != null, "code criteria need an input to read");
-				checked.put(code.name(), evaluateCheck(code, input));
+				decided.put(code.name(), evaluateCheck(code, input));
 			}
-			else if (criterion instanceof QuestionCriterion question) {
-				questions.put(question.name(), question.question());
+		}
+		boolean checkFailed = decided.values().stream().anyMatch(JevFinding::isFailure);
+
+		// Questions that need no asking are settled here too, so they never reach Jev.
+		Map<String, Question> questions = new LinkedHashMap<>();
+		for (JevCriterion criterion : this.criteria) {
+			if (criterion instanceof QuestionCriterion question) {
+				if (this.failFast && checkFailed) {
+					decided.put(question.name(), notApplicable(question, "skipped, a code check already failed"));
+				}
+				else if (question.appliesWhen() != null && !question.appliesWhen().test(requireInput(input))) {
+					decided.put(question.name(), notApplicable(question, "does not apply to this input"));
+				}
+				else {
+					questions.put(question.name(), question.question());
+				}
 			}
 		}
 
-		SystemOneResponse response = this.typeSafeClient.systemOne(state, questions);
+		SystemOneResponse response = questions.isEmpty() ? null : this.typeSafeClient.systemOne(state, questions);
 
 		List<JevFinding> findings = new ArrayList<>();
 		for (JevCriterion criterion : this.criteria) {
-			if (criterion instanceof QuestionCriterion question) {
+			JevFinding finding = decided.get(criterion.name());
+			if (finding == null && response != null) {
 				// Read through the map rather than answer(), which throws. A partial response
-				// should degrade that one criterion the same way an unrecognised answer kind
-				// does, not abort the caller's whole chat call.
-				findings.add(evaluate(question, response.answers().get(question.name())));
+				// should degrade that one criterion, not abort the caller's whole chat call.
+				finding = evaluate((QuestionCriterion) criterion, response.answers().get(criterion.name()));
 			}
-			else {
-				findings.add(checked.get(criterion.name()));
-			}
+			findings.add(finding);
 		}
 
 		boolean passed = findings.stream().noneMatch(JevFinding::isFailure);
 		String feedback = passed ? "" : this.feedbackRenderer.apply(findings);
 
 		return new JevVerdict(passed, findings, response, feedback);
+	}
+
+	private static JevJudgeInput requireInput(@Nullable JevJudgeInput input) {
+		Assert.state(input != null, "appliesWhen needs an input to read");
+		return input;
+	}
+
+	private static JevFinding notApplicable(QuestionCriterion criterion, String reason) {
+		return new JevFinding(criterion, null, JevFinding.Outcome.NOT_APPLICABLE,
+				format("%s: %s", criterion.name(), reason));
 	}
 
 	/**
@@ -207,8 +246,7 @@ public class JevJudge {
 
 	private JevFinding evaluate(QuestionCriterion criterion, @Nullable Answer answer) {
 		if (answer == null) {
-			return new JevFinding(criterion, new UnknownAnswer(null, Map.of()),
-					this.failOnInconclusive ? JevFinding.Outcome.FAILED : JevFinding.Outcome.INCONCLUSIVE,
+			return error(criterion, new UnknownAnswer(null, Map.of()),
 					format("%s: the service returned no answer for this criterion", criterion.name()));
 		}
 		if (answer instanceof NoulAnswer noul) {
@@ -220,8 +258,17 @@ public class JevJudge {
 		if (answer instanceof ChoiceAnswer choice) {
 			return evaluateChoice(criterion, choice);
 		}
-		return new JevFinding(criterion, answer, JevFinding.Outcome.INCONCLUSIVE,
+		return error(criterion, answer,
 				format("%s: the model returned an answer kind this SDK does not understand", criterion.name()));
+	}
+
+	/**
+	 * The instrument failed for this criterion, which says nothing about the answer. It
+	 * blocks only when the caller chose {@code failOnError}.
+	 */
+	private JevFinding error(QuestionCriterion criterion, Answer answer, String detail) {
+		return new JevFinding(criterion, answer,
+				this.failOnError ? JevFinding.Outcome.FAILED : JevFinding.Outcome.ERROR, detail);
 	}
 
 	private JevFinding evaluateNoul(QuestionCriterion criterion, NoulAnswer answer) {
@@ -237,12 +284,15 @@ public class JevJudge {
 	}
 
 	private JevFinding evaluateScore(QuestionCriterion criterion, ScoreAnswer answer) {
-		JevFinding.Outcome inconclusive = checkConfidence(answer.confidence());
+		boolean passes = answer.value() >= criterion.minimum();
+		double support = scoreSupport(criterion, answer, passes);
+		JevFinding.Outcome inconclusive = checkConfidence(support);
 		if (inconclusive != null) {
 			return new JevFinding(criterion, answer, inconclusive,
-					format("%s: the rubric levels were not well separated for this answer (confidence %.2f, needs at least %.2f)", criterion.name(), answer.confidence(), this.minConfidence));
+					format("%s: the rubric did not settle whether this reaches %.2f (%.2f of the probability supports the verdict, needs at least %.2f)",
+							criterion.name(), criterion.minimum(), support, this.minConfidence));
 		}
-		if (answer.value() >= criterion.minimum()) {
+		if (passes) {
 			return new JevFinding(criterion, answer, JevFinding.Outcome.PASSED, "");
 		}
 
@@ -260,26 +310,78 @@ public class JevJudge {
 	}
 
 	private JevFinding evaluateChoice(QuestionCriterion criterion, ChoiceAnswer answer) {
-		JevFinding.Outcome inconclusive = checkConfidence(answer.confidence());
+		boolean passes = criterion.acceptedOptions().contains(answer.value());
+		double support = choiceSupport(criterion, answer, passes);
+		JevFinding.Outcome inconclusive = checkConfidence(support);
 		if (inconclusive != null) {
 			return new JevFinding(criterion, answer, inconclusive,
-					format("%s: the options were not well separated for this answer (confidence %.2f, needs at least %.2f)", criterion.name(), answer.confidence(), this.minConfidence));
+					format("%s: the options did not settle whether this is one of %s (%.2f of the probability supports the verdict, needs at least %.2f)",
+							criterion.name(), criterion.acceptedOptions(), support, this.minConfidence));
 		}
-		if (criterion.acceptedOptions().contains(answer.value())) {
+		if (passes) {
 			return new JevFinding(criterion, answer, JevFinding.Outcome.PASSED, "");
 		}
 		return new JevFinding(criterion, answer, JevFinding.Outcome.FAILED,
-				format("%s: classified as \"%s\" (confidence %.2f), acceptable values are %s", criterion.name(),
-						answer.value(), answer.confidence(), criterion.acceptedOptions()));
+				format("%s: classified as \"%s\" (%.2f of the probability on unacceptable options), acceptable values are %s",
+						criterion.name(), answer.value(), support, criterion.acceptedOptions()));
+	}
+
+	/**
+	 * How much of a score's probability supports the pass or fail decision: the mass on
+	 * the levels at or above the first passing level when it passes, the mass below it
+	 * when it fails. That, not {@link ScoreAnswer#confidence()}, is what decides whether a
+	 * verdict can be acted on — a distribution split between two passing levels is not
+	 * peaked, yet it leaves no doubt the criterion passed.
+	 */
+	static double scoreSupport(QuestionCriterion criterion, ScoreAnswer answer, boolean passes) {
+		if (answer.probabilities().isEmpty()) {
+			return answer.confidence();
+		}
+		int firstPassingLevel = (int) Math.ceil(criterion.minimum());
+		double total = 0.0d;
+		double passing = 0.0d;
+		for (Map.Entry<Integer, Double> entry : answer.probabilities().entrySet()) {
+			total += entry.getValue();
+			if (entry.getKey() >= firstPassingLevel) {
+				passing += entry.getValue();
+			}
+		}
+		if (total <= 0.0d) {
+			return answer.confidence();
+		}
+		return (passes ? passing : total - passing) / total;
+	}
+
+	/**
+	 * How much of a choice's probability supports the decision: the summed mass on the
+	 * accepted options when it passes, on the rest when it fails.
+	 */
+	static double choiceSupport(QuestionCriterion criterion, ChoiceAnswer answer, boolean passes) {
+		if (answer.probabilities().isEmpty()) {
+			return answer.confidence();
+		}
+		double total = 0.0d;
+		double accepted = 0.0d;
+		for (Map.Entry<String, Double> entry : answer.probabilities().entrySet()) {
+			total += entry.getValue();
+			if (criterion.acceptedOptions().contains(entry.getKey())) {
+				accepted += entry.getValue();
+			}
+		}
+		if (total <= 0.0d) {
+			return answer.confidence();
+		}
+		return (passes ? accepted : total - accepted) / total;
 	}
 
 	/**
 	 * Nouls carry no confidence statistic by design, so only choices and scores can land
 	 * here.
-	 * @return the outcome to report, or {@code null} when confidence is good enough
+	 * @param support the probability that supports the verdict
+	 * @return the outcome to report, or {@code null} when the verdict is decisive enough
 	 */
-	private JevFinding.@Nullable Outcome checkConfidence(double confidence) {
-		if (confidence >= this.minConfidence) {
+	private JevFinding.@Nullable Outcome checkConfidence(double support) {
+		if (support >= this.minConfidence) {
 			return null;
 		}
 		return this.failOnInconclusive ? JevFinding.Outcome.FAILED : JevFinding.Outcome.INCONCLUSIVE;
@@ -363,9 +465,13 @@ public class JevJudge {
 
 		private final List<JevCriterion> criteria = new ArrayList<>();
 
-		private double minConfidence = 0.5d;
+		private double minConfidence = DEFAULT_MIN_CONFIDENCE;
 
 		private boolean failOnInconclusive;
+
+		private boolean failOnError;
+
+		private boolean failFast;
 
 		private Function<List<JevFinding>, String> feedbackRenderer = JevJudge::defaultFeedback;
 
@@ -435,10 +541,15 @@ public class JevJudge {
 		}
 
 		/**
-		 * Sets the confidence below which a choice or score answer is treated as
-		 * undecided. Raise it for consequential decisions and lower it for reversible
-		 * ones; nouls are unaffected, since they carry no confidence.
-		 * @param minConfidence the inclusive lower bound, between {@code 0} and {@code 1}
+		 * Sets how much of a choice's or score's probability must support its verdict
+		 * before the verdict is acted on; below it the criterion is
+		 * {@link JevFinding.Outcome#INCONCLUSIVE}. For a score that is the mass on the
+		 * verdict's side of {@code minimum}, for a choice the mass on the accepted (or the
+		 * rejected) options — not the answer's own {@code confidence}, which is low
+		 * whenever the mass is split, even between two passing levels. Raise it for
+		 * consequential decisions and lower it for reversible ones; nouls are unaffected.
+		 * @param minConfidence the inclusive lower bound, between {@code 0} and {@code 1};
+		 * {@link #DEFAULT_MIN_CONFIDENCE} by default
 		 * @return this builder
 		 */
 		public Builder minConfidence(double minConfidence) {
@@ -460,6 +571,33 @@ public class JevJudge {
 		}
 
 		/**
+		 * Whether a criterion the service could not answer blocks the response. Off by
+		 * default: a missing or unreadable answer is a failure of the instrument, not of
+		 * the answer, and is reported as {@link JevFinding.Outcome#ERROR}. Turn it on
+		 * where an unjudged criterion must never pass.
+		 * @param failOnError whether to treat an error as failed
+		 * @return this builder
+		 */
+		public Builder failOnError(boolean failOnError) {
+			this.failOnError = failOnError;
+			return this;
+		}
+
+		/**
+		 * Whether a failed code check skips the Jev call. When on and any
+		 * {@link #check check} fails, the verdict already fails, so the question criteria
+		 * are reported {@link JevFinding.Outcome#NOT_APPLICABLE} and no request is made.
+		 * Off by default, so every criterion is still answered and the feedback names every
+		 * defect at once.
+		 * @param failFast whether to skip the call after a failed check
+		 * @return this builder
+		 */
+		public Builder failFast(boolean failFast) {
+			this.failFast = failFast;
+			return this;
+		}
+
+		/**
 		 * Overrides how findings are rendered into the feedback text.
 		 * @param feedbackRenderer the renderer
 		 * @return this builder
@@ -477,6 +615,7 @@ public class JevJudge {
 			Assert.isTrue(this.criteria.stream().anyMatch(QuestionCriterion.class::isInstance),
 					"a judge must declare at least one question criterion; plain code checks need no judge");
 			return new JevJudge(this.typeSafeClient, this.criteria, this.minConfidence, this.failOnInconclusive,
+					this.failOnError, this.failFast,
 					this.feedbackRenderer);
 		}
 

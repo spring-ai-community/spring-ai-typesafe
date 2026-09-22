@@ -24,6 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.function.Predicate;
 
+import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Question;
@@ -123,9 +124,12 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 	 * a choice
 	 * @param acceptedOptions the labels that count as passing a choice; empty for the other
 	 * primitives
+	 * @param appliesWhen when the criterion applies; {@code null} for always. When it
+	 * returns {@code false} the question is not sent and the finding is
+	 * {@link JevFinding.Outcome#NOT_APPLICABLE}
 	 */
-	record QuestionCriterion(String name, Question question, double minimum,
-			Set<String> acceptedOptions) implements JevCriterion {
+	record QuestionCriterion(String name, Question question, double minimum, Set<String> acceptedOptions,
+			@Nullable Predicate<JevJudgeInput> appliesWhen) implements JevCriterion {
 
 		public QuestionCriterion {
 			Assert.hasText(name, "name must not be empty");
@@ -134,6 +138,29 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 			// the option list is quoted back to the model in the failure feedback.
 			acceptedOptions = acceptedOptions == null ? Set.of()
 					: Collections.unmodifiableSet(new LinkedHashSet<>(acceptedOptions));
+		}
+
+		/**
+		 * A criterion that always applies.
+		 */
+		public QuestionCriterion(String name, Question question, double minimum, Set<String> acceptedOptions) {
+			this(name, question, minimum, acceptedOptions, null);
+		}
+
+		/**
+		 * Returns a copy that is only asked when {@code appliesWhen} holds, for example a
+		 * groundedness question only when there is context to be grounded in:
+		 *
+		 * <pre>{@code
+		 * JevCriterion.noul("is_grounded", grounded, 0.7d)
+		 *     .appliesWhen(input -> !input.context().isEmpty())
+		 * }</pre>
+		 * @param appliesWhen when the criterion applies
+		 * @return the copy
+		 */
+		public QuestionCriterion appliesWhen(Predicate<JevJudgeInput> appliesWhen) {
+			Assert.notNull(appliesWhen, "appliesWhen must not be null");
+			return new QuestionCriterion(this.name, this.question, this.minimum, this.acceptedOptions, appliesWhen);
 		}
 
 	}

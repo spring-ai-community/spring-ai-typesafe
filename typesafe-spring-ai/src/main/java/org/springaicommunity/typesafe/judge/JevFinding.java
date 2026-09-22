@@ -26,7 +26,8 @@ import org.springaicommunity.typesafe.response.Answer;
  *
  * @param criterion the criterion that was checked
  * @param answer the Jev model's answer; {@code null} for a
- * {@link JevCriterion.CodeCriterion}, which is answered in code
+ * {@link JevCriterion.CodeCriterion}, which is answered in code, and for a criterion that
+ * was {@link Outcome#NOT_APPLICABLE} and so never asked
  * @param outcome whether the criterion passed, failed or could not be decided
  * @param detail a sentence naming the defect, ready to be handed back to the model as
  * feedback; empty when the criterion passed
@@ -49,7 +50,9 @@ public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcom
 	}
 
 	/**
-	 * The three ways a criterion can land.
+	 * The ways a criterion can land. Only {@link #FAILED} blocks the response; the
+	 * judge's {@code failOnInconclusive} and {@code failOnError} turn the undecided and
+	 * errored cases into {@code FAILED} when the caller wants them to block.
 	 */
 	public enum Outcome {
 
@@ -60,11 +63,23 @@ public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcom
 		FAILED,
 
 		/**
-		 * The model's distribution was too flat to act on. Confidence is a statistic over
-		 * the answer's own probability distribution, so a low value means the options or
-		 * levels were not well separated for this state, not that the answer was bad.
+		 * Too little of the answer's probability supported the verdict to act on it: the
+		 * question did not separate pass from fail for this state, which is not the same
+		 * as the answer being bad.
 		 */
-		INCONCLUSIVE
+		INCONCLUSIVE,
+
+		/**
+		 * The instrument failed: the service returned no answer for this criterion, or an
+		 * answer kind this SDK does not understand. Says nothing about the answer.
+		 */
+		ERROR,
+
+		/**
+		 * The criterion was not asked: its {@code appliesWhen} predicate did not hold, or
+		 * a failed code check skipped the call under {@code failFast}.
+		 */
+		NOT_APPLICABLE
 
 	}
 

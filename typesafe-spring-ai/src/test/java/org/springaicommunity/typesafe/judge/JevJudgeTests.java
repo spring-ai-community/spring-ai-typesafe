@@ -24,13 +24,17 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.MockTypeSafeServer;
+import org.springaicommunity.typesafe.judge.JevCriterion.QuestionCriterion;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
+import org.springaicommunity.typesafe.response.ChoiceAnswer;
+import org.springaicommunity.typesafe.response.ScoreAnswer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 
@@ -164,15 +168,14 @@ class JevJudgeTests {
 
 		JevJudge strict = JevJudge.builder(this.mock.client())
 			.score("helpfulness", HELPFULNESS, 2.0d)
-			.minConfidence(0.5d)
 			.failOnInconclusive(true)
 			.build();
 
 		JevVerdict verdict = strict.judge("What is the weather in Paris?", "Possibly mild.");
 
 		assertThat(verdict.passed()).isFalse();
-		assertThat(verdict.feedback()).contains("the rubric levels were not well separated")
-			.contains("confidence 0.20");
+		assertThat(verdict.feedback()).contains("the rubric did not settle whether this reaches 2.00")
+			.contains("0.50 of the probability supports the verdict, needs at least 0.60");
 	}
 
 	@Test
@@ -209,7 +212,8 @@ class JevJudgeTests {
 		JevVerdict verdict = toneJudge.judge("q", "Figure it out yourself.");
 
 		assertThat(verdict.passed()).isFalse();
-		assertThat(verdict.feedback()).contains("tone: classified as \"dismissive\" (confidence 0.74)")
+		assertThat(verdict.feedback())
+			.contains("tone: classified as \"dismissive\" (0.68 of the probability on unacceptable options)")
 			.contains("acceptable values are");
 	}
 
@@ -289,9 +293,10 @@ class JevJudgeTests {
 	}
 
 	@Test
-	void reportsAMissingAnswerAsUndecidedRatherThanFailingTheWholeCall() {
+	void reportsAMissingAnswerAsAnErrorRatherThanFailingTheWholeCall() {
 		// A partial response should degrade that one criterion, the same way an
-		// unrecognised answer kind does, not abort the caller's chat call.
+		// unrecognised answer kind does, not abort the caller's chat call. It is an
+		// instrument failure, not an ambiguous question, so it is ERROR, not INCONCLUSIVE.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
 			.andRespond(MockTypeSafeServer.jsonResponse("""
@@ -309,9 +314,11 @@ class JevJudgeTests {
 			.filteredOn(finding -> finding.name().equals("is_plausible"))
 			.singleElement()
 			.satisfies(finding -> {
-				assertThat(finding.outcome()).isEqualTo(JevFinding.Outcome.INCONCLUSIVE);
+				assertThat(finding.outcome()).isEqualTo(JevFinding.Outcome.ERROR);
 				assertThat(finding.detail()).contains("returned no answer");
 			});
+		assertThat(verdict.errors()).singleElement().satisfies(finding -> assertThat(finding.name()).isEqualTo("is_plausible"));
+		assertThat(verdict.inconclusive()).isEmpty();
 	}
 
 	@Test
@@ -427,6 +434,138 @@ class JevJudgeTests {
 		this.mock.server().verify();
 	}
 
+	@Test
+	void passesAScoreSplitBetweenTwoPassingLevelsDespiteLowConfidence() {
+		// Recorded live: 93% of the mass sits on passing levels, but it is split between
+		// "Mostly helpful" and "Excellent", so the distribution's own confidence is ~0.5.
+		// The pass/fail decision is not in doubt, and must not be reported as undecided.
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":2.34,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"0":0.0,"1":0.07,"2":0.52,"3":0.41},"confidence":0.51},
+				  "is_plausible":{"type":"noul","noul":0.97}
+				},"usage":{}}""");
+
+		JevVerdict verdict = judge().judge("What is the weather in Paris?", "It is 15 degrees Celsius in Paris.");
+
+		assertThat(verdict.summary()).isEqualTo("passed=true [helpfulness=PASSED, is_plausible=PASSED]");
+	}
+
+	@Test
+	void countsOnlyWholeLevelsAtOrAboveAFractionalMinimumAsPassing() {
+		// minimum 2.5: level 2 is below it, so only level 3 supports a pass.
+		QuestionCriterion helpfulness = JevCriterion.score("helpfulness", HELPFULNESS, 2.5d);
+		ScoreAnswer answer = new ScoreAnswer(2.5d, Map.of(), Map.of(2, 0.5d, 3, 0.5d), 0.5d);
+
+		assertThat(JevJudge.scoreSupport(helpfulness, answer, true)).isEqualTo(0.5d);
+		assertThat(JevJudge.scoreSupport(helpfulness, answer, false)).isEqualTo(0.5d);
+	}
+
+	@Test
+	void fallsBackToTheAnswersConfidenceWithoutProbabilities() {
+		QuestionCriterion helpfulness = JevCriterion.score("helpfulness", HELPFULNESS, 2.0d);
+
+		assertThat(JevJudge.scoreSupport(helpfulness, new ScoreAnswer(2.8d, Map.of(), Map.of(), 0.42d), true)).isEqualTo(0.42d);
+	}
+
+	@Test
+	void sumsTheAcceptedOptionsWhenJudgingAChoice() {
+		// No single option is confident, but helpful + neutral together clearly pass.
+		QuestionCriterion tone = JevCriterion.choice("tone",
+				Choice.of("What tone?", "helpful", "neutral", "dismissive"), "helpful", "neutral");
+		ChoiceAnswer answer = new ChoiceAnswer("neutral", Map.of("helpful", 0.35d, "neutral", 0.40d, "dismissive", 0.25d),
+				0.30d);
+
+		assertThat(JevJudge.choiceSupport(tone, answer, true)).isCloseTo(0.75d, within(1e-9));
+	}
+
+	@Test
+	void canBeConfiguredToRejectACriterionTheServiceCouldNotAnswer() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":3.0,
+				    "legend":{"0":"Terrible","1":"Unhelpful","2":"Helpful","3":"Excellent"},
+				    "probabilities":{"3":1.0},"confidence":0.9}
+				},"usage":{}}""");
+
+		JevJudge strict = JevJudge.builder(this.mock.client())
+			.score("helpfulness", HELPFULNESS, 2.0d)
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.failOnError(true)
+			.build();
+
+		JevVerdict verdict = strict.judge("q", "a");
+
+		assertThat(verdict.passed()).isFalse();
+		assertThat(verdict.failures()).singleElement().satisfies(finding -> assertThat(finding.name()).isEqualTo("is_plausible"));
+	}
+
+	@Test
+	void doesNotAskACriterionThatDoesNotApply() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.questions.is_grounded").doesNotExist())
+			.andExpect(jsonPath("$.questions.is_plausible.type").value("noul"))
+			.andRespond(MockTypeSafeServer.jsonResponse(PLAUSIBLE_ONLY));
+
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.criterion(JevCriterion.noul("is_grounded", PLAUSIBLE, 0.7d).appliesWhen(input -> !input.context().isEmpty()))
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.build();
+
+		JevVerdict verdict = judge.judge("q", "a");
+
+		assertThat(verdict.passed()).isTrue();
+		assertThat(verdict.summary()).isEqualTo("passed=true [is_grounded=NOT_APPLICABLE, is_plausible=PASSED]");
+		assertThat(verdict.notApplicable()).singleElement().satisfies(finding -> assertThat(finding.answer()).isNull());
+		this.mock.server().verify();
+	}
+
+	@Test
+	void makesNoCallWhenNoQuestionApplies() {
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.criterion(JevCriterion.noul("is_grounded", PLAUSIBLE, 0.7d).appliesWhen(input -> false))
+			.build();
+
+		JevVerdict verdict = judge.judge("q", "a");
+
+		assertThat(verdict.passed()).isTrue();
+		assertThat(verdict.response()).isNull();
+		this.mock.server().verify();
+	}
+
+	@Test
+	void skipsTheCallWhenACodeCheckFailsUnderFailFast() {
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.check("searched", input -> !input.toolCalls().isEmpty(), "no search was made")
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.failFast(true)
+			.build();
+
+		JevVerdict verdict = judge.judge("q", "a");
+
+		assertThat(verdict.passed()).isFalse();
+		assertThat(verdict.response()).isNull();
+		assertThat(verdict.summary()).isEqualTo("passed=false [searched=FAILED, is_plausible=NOT_APPLICABLE]");
+		assertThat(verdict.feedback()).isEqualTo("- searched: no search was made");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void stillAsksTheQuestionsUnderFailFastWhenEveryCheckPasses() {
+		respondWith(PLAUSIBLE_ONLY);
+
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.check("always", input -> true, "never")
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.failFast(true)
+			.build();
+
+		assertThat(judge.judge("q", "a").passed()).isTrue();
+		this.mock.server().verify();
+	}
+
 	private JevJudge searchJudge() {
 		return JevJudge.builder(this.mock.client())
 			.check("searched",
@@ -440,7 +579,6 @@ class JevJudgeTests {
 		return JevJudge.builder(this.mock.client())
 			.score("helpfulness", HELPFULNESS, 2.0d)
 			.noul("is_plausible", PLAUSIBLE, 0.7d)
-			.minConfidence(0.5d)
 			.build();
 	}
 

@@ -36,6 +36,8 @@ classDiagram
         +check(String, Predicate~JevJudgeInput~, String) Builder
         +criterion(JevCriterion) Builder
         +minConfidence(double) Builder
+        +failOnError(boolean) Builder
+        +failFast(boolean) Builder
         +failOnInconclusive(boolean) Builder
         +build() JevJudge
     }
@@ -135,6 +137,7 @@ questions cannot come back malformed, and keeps the dimensions separate.
 | **Cost of a third check** | a third prompt, or a longer one | negligible — same call |
 | **Feedback** | generated, varies run to run | synthesised from your own rubric |
 | **Undecided** | indistinguishable from failed | reported as `INCONCLUSIVE` |
+| **Could not judge** | indistinguishable from failed | reported as `ERROR` |
 
 ## Quick Start
 
@@ -151,7 +154,6 @@ JevJudge judge = JevJudge.builder(typeSafeClient)
         .instructions("Are the numeric values in `assistant_answer` physically plausible?")
         .whenFalse("At least one value is impossible")
         .build(), 0.7d)
-    .minConfidence(0.5d)
     .build();
 
 JevVerdict verdict = judge.judge(question, answer);
@@ -250,12 +252,30 @@ a JSON object.
 | `choice(String, Choice, String...)` | — | — | A criterion passing when the label is accepted. Validates the labels exist on the choice. |
 | `check(String, Predicate<JevJudgeInput>, String)` | — | — | A [code check](#code-criteria): passes when the predicate returns `true`, otherwise reports the defect. |
 | `criterion(JevCriterion)` | — | — | Add a pre-built criterion of either kind. |
-| `minConfidence(double)` | `double` | `0.5` | Below this, a choice or score is `INCONCLUSIVE`. Nouls carry no confidence and are unaffected. |
+| `minConfidence(double)` | `double` | `0.6` | How much of a choice's or score's probability must support its verdict; below it, `INCONCLUSIVE`. See [decisive, not peaked](#low-confidence-is-undecided-not-failed). Nouls are unaffected. |
 | `failOnInconclusive(boolean)` | `boolean` | `false` | Treat an undecided criterion as a failure. |
+| `failOnError(boolean)` | `boolean` | `false` | Treat a criterion the service could not answer (`ERROR`) as a failure. |
+| `failFast(boolean)` | `boolean` | `false` | When a code check fails, skip the Jev call; the questions become `NOT_APPLICABLE`. |
 | `feedbackRenderer(Function<List<JevFinding>, String>)` | — | `JevJudge::defaultFeedback` | Replace the wording fed back to the model. |
 
 Criterion names must be unique across both kinds, and a judge needs at least one question
 criterion.
+
+### Criteria that only sometimes apply
+
+A question can be made conditional with `appliesWhen`. When the predicate returns `false`
+the question is not sent, and its finding is `NOT_APPLICABLE`: it neither passes nor fails.
+A groundedness check on a turn with no retrieved context is the typical case:
+
+```java
+JevJudge judge = JevJudge.builder(typeSafeClient)
+    .criterion(JevCriterion.noul("is_grounded", groundedNoul, 0.7d)
+        .appliesWhen(input -> !input.context().isEmpty()))
+    .noul("is_relevant", relevantNoul, 0.7d)
+    .build();
+```
+
+When no question applies, no call is made and `verdict.response()` is `null`.
 
 ## Reading the verdict
 
@@ -274,6 +294,8 @@ classDiagram
         +String feedback
         +failures() List~JevFinding~
         +inconclusive() List~JevFinding~
+        +errors() List~JevFinding~
+        +notApplicable() List~JevFinding~
         +summary() String
     }
 
@@ -292,6 +314,8 @@ classDiagram
         PASSED
         FAILED
         INCONCLUSIVE
+        ERROR
+        NOT_APPLICABLE
     }
 
     class Answer {
@@ -306,20 +330,34 @@ classDiagram
 ```
 
 `response` is the untouched `SystemOneResponse`, so the usage counts and the request id are
-there when you need them.
+there when you need them. It is `null` when no question was asked: every question was not
+applicable, or `failFast` skipped the call.
 
 ```java
 public record JevVerdict(boolean passed, List<JevFinding> findings,
-                         SystemOneResponse response, String feedback) {
+                         @Nullable SystemOneResponse response, String feedback) {
     List<JevFinding> failures();
     List<JevFinding> inconclusive();
+    List<JevFinding> errors();
+    List<JevFinding> notApplicable();
     String summary();   // passed=false [helpfulness=PASSED, is_plausible=FAILED]
 }
 ```
 
-Each `JevFinding` carries its criterion, the raw answer (`null` for a code check), an
-`Outcome` of `PASSED`, `FAILED` or `INCONCLUSIVE`, and a `detail` sentence ready to hand back
-to a model.
+Each `JevFinding` carries its criterion, the raw answer (`null` for a code check or a
+criterion that was not asked), an `Outcome`, and a `detail` sentence ready to hand back to a
+model. Only `FAILED` blocks the verdict:
+
+| Outcome | Meaning | Blocks? |
+|---|---|---|
+| `PASSED` | the criterion was met | no |
+| `FAILED` | the criterion was not met | **yes** |
+| `INCONCLUSIVE` | too little probability supported the verdict | only with `failOnInconclusive(true)` |
+| `ERROR` | the service returned no answer, or one this SDK cannot read | only with `failOnError(true)` |
+| `NOT_APPLICABLE` | not asked: `appliesWhen` was false, or `failFast` skipped the call | no |
+
+`ERROR` and `NOT_APPLICABLE` findings are left out of the feedback, since neither is a
+defect the model can fix.
 
 ```java
 verdict.failures().forEach(finding ->
@@ -344,12 +382,23 @@ model reads.
 
 ## Low confidence is undecided, not failed
 
-A flat distribution means the levels or options did not separate well *for this state*,
-which is not the same as the answer being wrong. Those criteria are `INCONCLUSIVE` and do
-not block, unless you set `failOnInconclusive(true)`.
+What decides whether a verdict can be acted on is not how *peaked* the answer's distribution
+is, but how much of it supports the *verdict*. For a score, that is the probability on the
+verdict's side of `minimum`: the levels at or above it when the score passes, those below
+when it fails. For a choice, it is the summed probability of the accepted options, or of the
+rejected ones. When that is below `minConfidence` (0.6 by default: a clear majority, where a
+coin flip is 0.5), the criterion is `INCONCLUSIVE`, and it does not block unless you set
+`failOnInconclusive(true)`.
 
-A criterion the service returns no answer for degrades the same way rather than throwing —
-a partial response should cost you that one criterion, not the whole call.
+The difference matters. This distribution, recorded live, has a `confidence` of only 0.51
+because it is split between two levels, yet both levels pass a `minimum` of 2:
+
+```
+{ "0": 0.00, "1": 0.07, "2": 0.52, "3": 0.41 }   → 0.93 supports the pass → PASSED
+```
+
+A criterion the service returns no answer for is reported as `ERROR` rather than thrown, so a
+partial response costs you that one criterion, not the whole call.
 
 ## See Also
 

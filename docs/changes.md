@@ -3,8 +3,9 @@
 ## 0.2.0 (unreleased)
 
 0.2.0 expands the [Model-as-a-Judge](judge/JevJudge.md) API: code checks alongside Jev
-questions, a typed judge input, and a choice of what the self-refine advisor does when
-judging itself fails. It has a few breaking changes, each listed below with its fix. Most
+questions, a typed judge input, outcomes that say *why* a criterion was not decided,
+confidence gating on the verdict rather than the distribution, and a choice of what the
+self-refine advisor does when judging itself fails. It has a few breaking changes, each listed below with its fix. Most
 upgrades need a recompile and at most a type rename.
 
 ### At a glance
@@ -14,6 +15,11 @@ upgrades need a recompile and at most a type rename.
 | `JevJudge` | [Code criteria](#code-criteria) via `check(...)` | no |
 | `JevJudge` | [Typed input](#typed-judge-input) via `JevJudgeInput` and `judge(JevJudgeInput)` | no |
 | `JevSelfRefineAdvisor` | [`judgeErrorPolicy`](#judge-error-policy-for-the-self-refine-advisor) | no |
+| `JevJudge` | [`appliesWhen`, `failOnError`, `failFast`](#conditional-criteria-error-policy-and-fail-fast) | no |
+| `JevFinding.Outcome` | [new `ERROR` and `NOT_APPLICABLE` values](#outcome-has-two-new-values) | **source** (exhaustive `switch`) |
+| `JevJudge` | [a missing answer is `ERROR`, not `INCONCLUSIVE`](#a-missing-answer-is-error-not-inconclusive) | **behaviour** |
+| `JevJudge` | [`minConfidence` gates on verdict support; default 0.5 → 0.6](#minconfidence-now-gates-on-how-much-probability-supports-the-verdict) | **behaviour** |
+| `JevVerdict` | [`response()` may be `null`](#jevverdictresponse-may-be-null) | only with `appliesWhen` or `failFast` |
 | `JevCriterion` | [record → sealed interface](#jevcriterion-is-now-a-sealed-interface) | **source and binary** |
 | `JevFinding` | [`answer()` may be `null`](#jevfindinganswer-may-be-null) | only if you add code checks |
 | `JevSelfRefineAdvisor` | [Tool results moved to `tool_calls`](#tool-results-moved-to-tool_calls) | **behaviour** |
@@ -74,6 +80,18 @@ the judging call itself fails:
 
 See [When judging fails](judge/JevSelfRefineAdvisor.md#when-judging-fails).
 
+#### Conditional criteria, error policy and fail-fast
+
+- **`appliesWhen`**: `JevCriterion.noul/score/choice(...).appliesWhen(predicate)` makes a
+  question conditional. When the predicate is false, the question is not sent and its
+  finding is `NOT_APPLICABLE`. It neither passes nor fails.
+- **`failOnError(true)`**: a criterion the service could not answer (`ERROR`) blocks the
+  verdict. Off by default.
+- **`failFast(true)`**: when a code check fails, the Jev call is skipped and the questions
+  are `NOT_APPLICABLE`. The verdict already fails, so the call would be wasted.
+
+See [Reading the verdict](judge/JevJudge.md#reading-the-verdict).
+
 ---
 
 ### Breaking changes and how to migrate
@@ -121,6 +139,56 @@ unless you add code checks. If you do, and you read `answer()`, guard it:
 ```java
 if (finding.answer() instanceof NoulAnswer noul) { ... }   // false for null, no NPE
 ```
+
+The same applies to criteria that were not asked (`NOT_APPLICABLE`).
+
+#### `Outcome` has two new values
+
+`JevFinding.Outcome` gains `ERROR`, when the service could not answer a criterion, and
+`NOT_APPLICABLE`, when a criterion was not asked.
+
+**Affected:** an exhaustive `switch` over `Outcome` no longer compiles.
+
+**Migrate:** add the two cases. Neither blocks the verdict by default, so treat them like
+`INCONCLUSIVE` if you only care about pass/fail.
+
+#### A missing answer is `ERROR`, not `INCONCLUSIVE`
+
+In 0.1.0, a criterion the service returned no answer for, or one with an answer kind the SDK
+could not read, was reported `INCONCLUSIVE`, the same as an ambiguous question. It is now
+`ERROR`: an instrument failure, not a verdict on the answer. `failOnInconclusive(true)` no
+longer makes it block.
+
+**Migrate:** if missing answers must block, add `failOnError(true)`. Code reading
+`verdict.inconclusive()` to find outages should read `verdict.errors()`.
+
+#### `minConfidence` now gates on how much probability supports the verdict
+
+In 0.1.0, a score or choice was `INCONCLUSIVE` when the answer's own `confidence` was below
+`minConfidence` (default 0.5). `confidence` measures how peaked the whole distribution is, so
+an answer split between two *passing* levels was reported undecided, even though the pass was
+never in doubt. In live runs, a 4-level `helpfulness` rubric was `INCONCLUSIVE` in 8 of 9
+judgements this way.
+
+`minConfidence` now applies to the probability on the verdict's side of the threshold. For a
+score, that's the mass on the levels at or above `minimum` when it passes, below when it
+fails. For a choice, it's the mass on the accepted options, or the rejected ones. The default
+is now **0.6**, a clear majority; a coin flip between pass and fail supports the verdict at
+0.5.
+
+**Affected:** judges will report fewer `INCONCLUSIVE` scores and choices. An explicit
+`minConfidence(0.5d)` from 0.1.0 is now permissive: 0.5 is the coin-flip point.
+
+**Migrate:** remove an explicit `minConfidence(0.5d)` to get the new default, or raise it for
+consequential decisions. Findings report the supporting probability in their detail, e.g.
+`0.50 of the probability supports the verdict, needs at least 0.60`.
+
+#### `JevVerdict.response()` may be `null`
+
+When no question is asked, because every question criterion was not applicable or
+`failFast` skipped the call, there is no `SystemOneResponse`, and `response()` is `null`.
+Nothing changes unless you use `appliesWhen` or `failFast`. If you do, guard reads of
+`response()`.
 
 #### Tool results moved to `tool_calls`
 
@@ -201,3 +269,7 @@ you have scripted.
 3. Using `JevSelfRefineAdvisor` with tools? Re-point groundedness criteria at `tool_calls`.
 4. Need an outage to fail the chat call? Set `judgeErrorPolicy(FAIL_CLOSED)`.
 5. Asserting on the judged state in tests? Update `supporting_context` to the array form.
+6. `switch` over `JevFinding.Outcome`? Add `ERROR` and `NOT_APPLICABLE`.
+7. Relying on `INCONCLUSIVE` for missing answers, or on `minConfidence(0.5d)`? See
+   [the confidence change](#minconfidence-now-gates-on-how-much-probability-supports-the-verdict)
+   and set `failOnError(true)` where outages must block.

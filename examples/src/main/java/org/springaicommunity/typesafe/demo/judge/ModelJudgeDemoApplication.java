@@ -146,10 +146,10 @@ public class ModelJudgeDemoApplication {
 							.whenFalse("Introduces facts that appear nowhere in the question")
 							.build(),
 						0.5d)
-				// Confidence is a statistic over the answer's own distribution. Below
-				// this the question did not separate well for this state, which is
-				// reported as undecided rather than as a failure.
-				.minConfidence(0.5d)
+				// minConfidence keeps its default: a clear majority (60%) of a score's
+				// probability must support the verdict. Below that the rubric did not
+				// settle pass or fail for this answer, which is reported as undecided
+				// rather than as a failure.
 				.build();
 		}
 

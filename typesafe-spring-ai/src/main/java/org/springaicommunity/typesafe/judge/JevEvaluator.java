@@ -116,19 +116,25 @@ public class JevEvaluator implements Evaluator {
 	}
 
 	/**
-	 * Collapses the verdict onto the single float {@link EvaluationResponse} has room for.
-	 * An inconclusive criterion counts as neither passed nor failed, so it lowers the rate
-	 * without being treated as a failure — the same stance {@link JevVerdict#passed()} takes.
+	 * Collapses the verdict onto the single float {@link EvaluationResponse} has room for:
+	 * the fraction of the criteria that applied which passed. An inconclusive or errored
+	 * criterion counts as neither passed nor failed, so it lowers the rate without being
+	 * treated as a failure — the same stance {@link JevVerdict#passed()} takes. A criterion
+	 * that did not apply is left out altogether.
 	 */
 	private static float passRate(JevVerdict verdict) {
-		if (verdict.findings().isEmpty()) {
-			return 0.0f;
+		long applicable = verdict.findings()
+			.stream()
+			.filter(finding -> finding.outcome() != JevFinding.Outcome.NOT_APPLICABLE)
+			.count();
+		if (applicable == 0) {
+			return verdict.passed() ? 1.0f : 0.0f;
 		}
 		long passed = verdict.findings()
 			.stream()
 			.filter(finding -> finding.outcome() == JevFinding.Outcome.PASSED)
 			.count();
-		return (float) passed / verdict.findings().size();
+		return (float) passed / applicable;
 	}
 
 }

@@ -122,6 +122,14 @@ class WeatherJudgeTests {
 		return ModelJudgeDemoApplication.WeatherJudge.create(this.typeSafeClient).judge(question, answer);
 	}
 
+	/**
+	 * The judge gates on the probability behind a verdict, so the distribution must agree
+	 * with the score: all of it on the level the score rounds to.
+	 */
+	private static int nearestLevel(double score) {
+		return (int) Math.max(0, Math.min(3, Math.round(score)));
+	}
+
 	private org.springframework.test.web.client.ResponseCreator respondWith(double helpfulness, double plausible,
 			double grounded, double confidence) {
 		String body = """
@@ -131,14 +139,14 @@ class WeatherJudgeTests {
 				    "helpfulness": {
 				      "type": "score", "score": %s,
 				      "legend": {"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
-				      "probabilities": {"0":0.1,"1":0.2,"2":0.3,"3":0.4},
+				      "probabilities": {"%d": 1.0},
 				      "confidence": %s
 				    },
 				    "is_plausible": { "type": "noul", "noul": %s },
 				    "is_grounded":  { "type": "noul", "noul": %s }
 				  },
 				  "usage": { "input_tokens": 210, "output_tokens": 32 }
-				}""".formatted(helpfulness, confidence, plausible, grounded);
+				}""".formatted(helpfulness, nearestLevel(helpfulness), confidence, plausible, grounded);
 		return MockRestResponseCreators.withSuccess(body, MediaType.APPLICATION_JSON);
 	}
 
