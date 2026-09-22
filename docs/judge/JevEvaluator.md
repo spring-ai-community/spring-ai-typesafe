@@ -76,7 +76,7 @@ JevJudge grounded = JevJudge.builder(typeSafeClient)
 ```
 
 This is also how a groundedness check gets real evidence in a RAG setting, which the
-[self-refine advisor](JevSelfRefineAdvisor.md) cannot do when tool execution is internal.
+[self-refine advisor](JevSelfRefineAdvisor.md) cannot do when it is ordered before the tool loop.
 
 ## See Also
 

@@ -74,13 +74,19 @@ against that field:
 Whether a tool was called at all is better settled by a
 [code check](JevJudge.md#code-criteria) than asked of Jev.
 
-!!! warning "Internal tool execution hides tool results"
-    With Spring AI's default **internal** tool execution the model loop runs inside the
-    `ChatModel`, and the intermediate `ToolResponseMessage`s never reach an advisor at all.
+!!! warning "Advisor order decides what the judge sees, and what a retry can fix"
+    In Spring AI 2.x, `ChatClient` runs the tool loop in a `ToolCallingAdvisor` registered at
+    `HIGHEST_PRECEDENCE + 300`. Where this advisor sits relative to it is a trade-off:
 
-    Then `tool_calls` is absent, and a groundedness question against it has nothing to
-    check. Either phrase the criterion against what is actually visible, or disable internal
-    tool execution so the tool messages land in the prompt.
+| Order | The judge sees | A retry |
+|---|---|---|
+| after it (the default, `LOWEST_PRECEDENCE - 2000`) | every tool call and result, in `tool_calls` | re-asks the model with the same tool history; tools are **not** re-run |
+| before it (e.g. `HIGHEST_PRECEDENCE + 100`) | the original prompt and the final answer only; no `tool_calls` | re-runs the whole tool loop, so a tool can return something new |
+
+    Pick *after* when the judge must check the answer against tool results. Pick *before*
+    when a failure is best fixed by calling the tools again: the
+    [weather demo](../demos.md#modeljudgedemoapplication) does this, because its tool
+    returns a different value on each call.
 
 ## Failing hard
 

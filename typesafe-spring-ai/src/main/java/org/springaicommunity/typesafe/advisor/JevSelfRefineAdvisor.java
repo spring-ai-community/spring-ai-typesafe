@@ -83,11 +83,13 @@ import org.springframework.util.StringUtils;
  * question.
  *
  * <p>
- * Tool calls only reach an advisor when they are in the prompt. With Spring AI's default
- * internal tool execution the tool loop runs below the advisor chain, and this advisor sees
- * the original prompt and the finished answer, with nothing in between. Place the advisor
- * so that the tool messages are already in the prompt it receives, or phrase such criteria
- * against what is actually visible.
+ * Tool calls only reach this advisor when they are in the prompt it receives, and that
+ * depends on its order relative to the {@code ToolCallingAdvisor} that {@code ChatClient}
+ * registers at {@code HIGHEST_PRECEDENCE + 300}. Ordered after it — the default order
+ * does this — the advisor runs inside the tool loop and sees every call and result. A retry
+ * then re-asks the model with that history, but does not re-run the tools. Ordered before
+ * it, a retry re-runs the whole tool loop, but the advisor sees only the original prompt
+ * and the finished answer, so {@code tool_calls} is absent.
  *
  * <h3>When judging itself fails</h3>
  *

@@ -59,6 +59,10 @@ public class ModelJudgeDemoApplication {
 	CommandLineRunner cli(ChatModel chatModel, TypeSafeClient typeSafeClient) {
 		return args -> {
 			// @formatter:off
+			// Ordered before the tool-calling advisor (HIGHEST_PRECEDENCE + 300) on purpose:
+			// a rejected answer is best fixed by calling the weather tool again, and only
+			// from out here does a retry re-run the tool loop. The price is that the judge
+			// does not see `tool_calls`; see the advisor docs for the trade-off.
 			ChatClient chatClient = ChatClient.builder(chatModel)
 					.defaultTools(new WeatherTools())
 					.defaultAdvisors(JevSelfRefineAdvisor.builder()
