@@ -41,3 +41,4 @@ build/
 ### MkDocs ###
 # The site is built and published by CI, never committed.
 site/
+/ideas/*

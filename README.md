@@ -32,10 +32,10 @@ SystemOneResponse response = typeSafeClient.systemOne(
             "frustration", Score.of("How frustrated is the customer?",
                     "Calm", "Frustrated", "Very angry")));
 
-double urgency     = response.noulValue("is_urgent");            // 0.92
-String department  = response.choiceValue("department");         // "technical"
+double urgency     = response.noulValue("is_urgent");            // 0.95
+String department  = response.choiceValue("department");         // "billing"
 double confidence  = response.choice("department").confidence(); // 0.82
-double frustration = response.scoreValue("frustration");         // 1.6
+double frustration = response.scoreValue("frustration");         // 1.1
 ```
 
 The three primitives — `Noul`, `Choice` and `Score` — are described in

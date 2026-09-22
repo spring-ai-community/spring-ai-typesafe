@@ -71,7 +71,7 @@ confidence, because a noul of `0.5` already tells you the model is undecided.
 ```java
 Noul urgent = Noul.of("Does this convey urgency?");
 
-double value = response.noulValue("is_urgent");     // 0.92
+double value = response.noulValue("is_urgent");     // 0.95
 boolean act  = response.noul("is_urgent").isTrue(0.8);
 ```
 
@@ -100,7 +100,7 @@ Choice department = Choice.builder()
     .option("sales",     "Pricing, upgrades, new accounts")
     .build();
 
-String label            = response.choiceValue("department");            // "technical"
+String label            = response.choiceValue("department");            // "billing"
 double confidence       = response.choice("department").confidence();    // 0.82
 double billingOdds      = response.choice("department").probabilityOf("billing");
 List<String> plausible  = response.choice("department").optionsAbove(0.1); // descending
@@ -115,8 +115,8 @@ List<String> plausible  = response.choice("department").optionsAbove(0.1); // de
 ## Score
 
 Place the state on an ordered rubric you define. The value is **continuous and
-probability-weighted**, not a rounded level: a `1.6` on a three-level rubric sits between
-`Frustrated` and `Very angry`, closer to the latter.
+probability-weighted**, not a rounded level: a `1.1` on a three-level rubric sits just past
+`Frustrated`, leaning toward `Very angry`.
 
 ```java
 Score frustration = Score.builder()
@@ -126,7 +126,7 @@ Score frustration = Score.builder()
     .level("Very angry, strong language")
     .build();
 
-double value      = response.scoreValue("frustration");            // 1.6
+double value      = response.scoreValue("frustration");            // 1.1
 String label      = response.score("frustration").nearestLabel();  // "Very angry"
 int level         = response.score("frustration").nearestLevel();  // 2
 JsonContent first = response.score("frustration").labelOf(0);      // "Calm, just stating facts"
