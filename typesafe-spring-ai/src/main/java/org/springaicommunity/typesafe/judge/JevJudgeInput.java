@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -36,8 +34,9 @@ import org.springframework.util.Assert;
  * <p>
  * The input is backed by the very map that becomes the judged state, so the typed view a
  * {@link JevCriterion.CodeCriterion} reads and the state Jev answers against cannot drift
- * apart. Write question instructions against the field names below — {@code `tool_calls`},
- * {@code `expected_output`} — and code checks against the typed readers.
+ * apart. Write question instructions against the field names below —
+ * {@code `tool_calls`}, {@code `expected_output`} — and code checks against the typed
+ * readers.
  *
  * <pre>{@code
  * JevJudgeInput input = JevJudgeInput.builder()
@@ -102,7 +101,8 @@ public final class JevJudgeInput {
 	@SuppressWarnings("unchecked")
 	public static JevJudgeInput of(JsonContent state) {
 		Assert.notNull(state, "state must not be null");
-		Assert.isTrue(state.value() instanceof Map, "the judged state must be a JSON object to be read as a JevJudgeInput");
+		Assert.isTrue(state.value() instanceof Map,
+				"the judged state must be a JSON object to be read as a JevJudgeInput");
 		return new JevJudgeInput(new LinkedHashMap<>((Map<String, Object>) state.value()));
 	}
 
@@ -172,8 +172,8 @@ public final class JevJudgeInput {
 						stringOrNull(map.get("result"))));
 			}
 			else {
-				throw mismatch(TOOL_CALLS_FIELD + "[" + i + "]",
-						"a tool call, an object with a name, or a tool name", element);
+				throw mismatch(TOOL_CALLS_FIELD + "[" + i + "]", "a tool call, an object with a name, or a tool name",
+						element);
 			}
 		}
 		return List.copyOf(toolCalls);
@@ -224,8 +224,8 @@ public final class JevJudgeInput {
 	}
 
 	private static IllegalStateException mismatch(String name, String expected, Object value) {
-		return new IllegalStateException("field '" + name + "' was expected to be " + expected + " but was "
-				+ value.getClass().getSimpleName());
+		return new IllegalStateException(
+				"field '" + name + "' was expected to be " + expected + " but was " + value.getClass().getSimpleName());
 	}
 
 	/**

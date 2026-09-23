@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.advisor;
 
-
-
 import java.util.List;
 
 import org.jspecify.annotations.Nullable;
@@ -45,21 +43,21 @@ import org.springframework.util.Assert;
  *
  * <p>
  * Both directions are checked because they fail differently. An input battery catches the
- * request that should never have been made; an output battery catches the reply that should
- * never have been given, which is the only one of the two that notices a jailbreak that
- * actually worked. Each battery is a single call carrying all its hazards.
+ * request that should never have been made; an output battery catches the reply that
+ * should never have been given, which is the only one of the two that notices a jailbreak
+ * that actually worked. Each battery is a single call carrying all its hazards.
  *
  * <p>
- * A blocked input never reaches the model at all — the refusal is returned in place of the
- * call, so nothing is spent and nothing is generated. A blocked output replaces the
+ * A blocked input never reaches the model at all — the refusal is returned in place of
+ * the call, so nothing is spent and nothing is generated. A blocked output replaces the
  * generated text after the fact.
  *
  * <p>
  * This is a different job from {@link JevSelfRefineAdvisor}, which judges quality and
- * retries to improve it. Retrying does not help here: an unsafe answer is not a draft. Place
- * this one nearer the model (a higher order value runs later, closer to the call) so it sees
- * the final text, and note that the two compose — evaluation can retry while the guardrail
- * still has the last word.
+ * retries to improve it. Retrying does not help here: an unsafe answer is not a draft.
+ * Place this one nearer the model (a higher order value runs later, closer to the call)
+ * so it sees the final text, and note that the two compose — evaluation can retry while
+ * the guardrail still has the last word.
  *
  * <pre>{@code
  * ChatClient.builder(chatModel)
@@ -68,8 +66,8 @@ import org.springframework.util.Assert;
  * }</pre>
  *
  * Streaming is unsupported, for the same reason as the self-refine advisor: an output
- * battery needs the whole reply before it can judge it, by which point it has already been
- * emitted.
+ * battery needs the whole reply before it can judge it, by which point it has already
+ * been emitted.
  *
  * @author Christian Tzolov
  */
@@ -176,10 +174,7 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 	private ChatClientResponse refuse(ChatClientRequest request, JevGuardrail.Verdict verdict) {
 		String text = verdict.outcome() == JevGuardrail.Outcome.SUPPORT ? this.supportMessage : this.refusal;
 		ChatResponse chatResponse = new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
-		return ChatClientResponse.builder()
-			.chatResponse(chatResponse)
-			.context(request.context())
-			.build();
+		return ChatClientResponse.builder().chatResponse(chatResponse).context(request.context()).build();
 	}
 
 	private static String answerOf(ChatClientResponse response) {
@@ -215,7 +210,8 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 
 		private boolean blockOnReview;
 
-		// Later than the self-refine advisor's default, so a guardrail sees the answer that
+		// Later than the self-refine advisor's default, so a guardrail sees the answer
+		// that
 		// self-refinement settled on rather than an intermediate draft.
 		private int advisorOrder = BaseAdvisor.LOWEST_PRECEDENCE - 1000;
 
@@ -235,8 +231,8 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 		}
 
 		/**
-		 * @param outputBattery what to ask of the reply, or {@code null} to skip screening
-		 * the output
+		 * @param outputBattery what to ask of the reply, or {@code null} to skip
+		 * screening the output
 		 * @return this builder
 		 */
 		public Builder outputBattery(@Nullable JevGuardrail outputBattery) {

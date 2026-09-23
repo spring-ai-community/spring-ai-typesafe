@@ -16,12 +16,9 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import java.util.List;
 
 import org.jspecify.annotations.Nullable;
-
 import org.springaicommunity.typesafe.response.SystemOneResponse;
 
 /**
@@ -59,9 +56,7 @@ public record JevVerdict(boolean passed, List<JevFinding> findings, @Nullable Sy
 	 * @return the findings the model could not decide with enough confidence
 	 */
 	public List<JevFinding> inconclusive() {
-		return this.findings.stream()
-			.filter(finding -> finding.outcome() == JevFinding.Outcome.INCONCLUSIVE)
-			.toList();
+		return this.findings.stream().filter(finding -> finding.outcome() == JevFinding.Outcome.INCONCLUSIVE).toList();
 	}
 
 	/**

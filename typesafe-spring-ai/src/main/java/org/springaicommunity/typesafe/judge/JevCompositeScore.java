@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -31,19 +29,19 @@ import org.springframework.util.Assert;
  * Several score dimensions combined into one number with weights you control.
  *
  * <p>
- * <strong>For ordering, never for gating.</strong> The argument this SDK makes for Jev over a
- * single rubric prompt is that independent checks must be thresholded independently: an answer
- * that is fluent and on topic but quotes an impossible temperature has to fail on
- * plausibility alone, and any average hides exactly that. So do not build a pass/fail
- * decision on a composite — {@link JevJudge} thresholds each criterion separately and is the
- * right tool for that.
+ * <strong>For ordering, never for gating.</strong> The argument this SDK makes for Jev
+ * over a single rubric prompt is that independent checks must be thresholded
+ * independently: an answer that is fluent and on topic but quotes an impossible
+ * temperature has to fail on plausibility alone, and any average hides exactly that. So
+ * do not build a pass/fail decision on a composite — {@link JevJudge} thresholds each
+ * criterion separately and is the right tool for that.
  *
  * <p>
- * What a composite is genuinely for is ranking a field of candidates that have all already
- * passed: which five of forty applicants to read first, which support ticket to work next.
- * There the dimensions are not pass conditions, they are preferences, and the weights are the
- * policy. Keeping them in code means a disappointing ranking is fixed by changing a weight
- * rather than by rewording a question.
+ * What a composite is genuinely for is ranking a field of candidates that have all
+ * already passed: which five of forty applicants to read first, which support ticket to
+ * work next. There the dimensions are not pass conditions, they are preferences, and the
+ * weights are the policy. Keeping them in code means a disappointing ranking is fixed by
+ * changing a weight rather than by rewording a question.
  *
  * <pre>{@code
  * JevCompositeScore engineering = JevCompositeScore.builder()
@@ -68,7 +66,8 @@ public final class JevCompositeScore {
 
 	/**
 	 * Combines the named score answers of a response.
-	 * @param response the response, which must carry a score answer for every weighted name
+	 * @param response the response, which must carry a score answer for every weighted
+	 * name
 	 * @return the weighted sum of each dimension normalised to {@code [0, 1]}
 	 */
 	public double of(SystemOneResponse response) {
@@ -82,18 +81,19 @@ public final class JevCompositeScore {
 	}
 
 	/**
-	 * Normalises one score onto {@code [0, 1]} using the rubric's own height, so dimensions
-	 * with different numbers of levels can be compared.
+	 * Normalises one score onto {@code [0, 1]} using the rubric's own height, so
+	 * dimensions with different numbers of levels can be compared.
 	 * @param answer the score answer
 	 * @return the normalised value
-	 * @throws IllegalStateException when the answer carries no legend, so the rubric has no
-	 * height to divide by
+	 * @throws IllegalStateException when the answer carries no legend, so the rubric has
+	 * no height to divide by
 	 */
 	public static double normalise(ScoreAnswer answer) {
 		Assert.notNull(answer, "answer must not be null");
 		int maxLevel = answer.maxLevel();
 		// The rubric height comes from the legend. Without it there is no scale to divide
-		// by, and returning 0 would score every candidate identically — a plausible-looking
+		// by, and returning 0 would score every candidate identically — a
+		// plausible-looking
 		// number that silently collapses the ranking this class exists to produce.
 		Assert.state(maxLevel > 0,
 				"cannot normalise a score whose answer carries no legend, so the rubric height is unknown");
@@ -140,8 +140,8 @@ public final class JevCompositeScore {
 
 		/**
 		 * Allows weights that do not sum to {@code 1}, which makes the composite's range
-		 * something other than {@code [0, 1]}. Off by default, because weights that do not
-		 * sum to one are usually a typo rather than an intention.
+		 * something other than {@code [0, 1]}. Off by default, because weights that do
+		 * not sum to one are usually a typo rather than an intention.
 		 * @param allow whether to skip the check
 		 * @return this builder
 		 */

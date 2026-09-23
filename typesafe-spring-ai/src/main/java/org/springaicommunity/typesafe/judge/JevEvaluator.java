@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,19 +31,21 @@ import org.springframework.util.StringUtils;
  * A {@link JevJudge} behind Spring AI's {@link Evaluator} interface.
  *
  * <p>
- * Spring AI's own evaluators — {@code RelevancyEvaluator} and {@code FactCheckingEvaluator} —
- * prompt a second chat model and read a verdict out of its prose, which comes down to
- * {@code "yes".equalsIgnoreCase(response)}. That fails in two directions: the model may
- * answer in a form the parser does not expect, and one yes-or-no cannot say which of several
- * things was wrong. This evaluator asks typed questions instead, so the verdict cannot come
- * back malformed and every criterion keeps its own threshold.
+ * Spring AI's own evaluators — {@code RelevancyEvaluator} and
+ * {@code FactCheckingEvaluator} — prompt a second chat model and read a verdict out of
+ * its prose, which comes down to {@code "yes".equalsIgnoreCase(response)}. That fails in
+ * two directions: the model may answer in a form the parser does not expect, and one
+ * yes-or-no cannot say which of several things was wrong. This evaluator asks typed
+ * questions instead, so the verdict cannot come back malformed and every criterion keeps
+ * its own threshold.
  *
  * <p>
- * The mapping is lossy in one place and the loss is worth naming: {@link EvaluationResponse}
- * carries a single {@code score}, while a judge holds one per criterion. The single score is
- * the fraction of criteria that passed, and the per-criterion detail is preserved under
- * {@link #FINDINGS_METADATA_KEY} for callers who want it. If the per-criterion view is what
- * you are after, use {@link JevJudge#judge} directly and read the {@link JevVerdict}.
+ * The mapping is lossy in one place and the loss is worth naming:
+ * {@link EvaluationResponse} carries a single {@code score}, while a judge holds one per
+ * criterion. The single score is the fraction of criteria that passed, and the
+ * per-criterion detail is preserved under {@link #FINDINGS_METADATA_KEY} for callers who
+ * want it. If the per-criterion view is what you are after, use {@link JevJudge#judge}
+ * directly and read the {@link JevVerdict}.
  *
  * <pre>{@code
  * Evaluator evaluator = new JevEvaluator(judge);
@@ -87,11 +87,7 @@ public class JevEvaluator implements Evaluator {
 		// into the judged state as their own field, one entry per document, rather than
 		// being flattened into the question.
 		List<String> context = evaluationRequest.getDataList() == null ? List.of()
-				: evaluationRequest.getDataList()
-					.stream()
-					.map(Document::getText)
-					.filter(StringUtils::hasText)
-					.toList();
+				: evaluationRequest.getDataList().stream().map(Document::getText).filter(StringUtils::hasText).toList();
 
 		JevVerdict verdict = this.judge.judge(JevJudgeInput.builder()
 			.question(evaluationRequest.getUserText())
@@ -116,11 +112,11 @@ public class JevEvaluator implements Evaluator {
 	}
 
 	/**
-	 * Collapses the verdict onto the single float {@link EvaluationResponse} has room for:
-	 * the fraction of the criteria that applied which passed. An inconclusive or errored
-	 * criterion counts as neither passed nor failed, so it lowers the rate without being
-	 * treated as a failure — the same stance {@link JevVerdict#passed()} takes. A criterion
-	 * that did not apply is left out altogether.
+	 * Collapses the verdict onto the single float {@link EvaluationResponse} has room
+	 * for: the fraction of the criteria that applied which passed. An inconclusive or
+	 * errored criterion counts as neither passed nor failed, so it lowers the rate
+	 * without being treated as a failure — the same stance {@link JevVerdict#passed()}
+	 * takes. A criterion that did not apply is left out altogether.
 	 */
 	private static float passRate(JevVerdict verdict) {
 		long applicable = verdict.findings()

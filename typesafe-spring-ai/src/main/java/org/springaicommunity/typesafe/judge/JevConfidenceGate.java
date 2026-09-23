@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -27,14 +25,14 @@ import org.springaicommunity.typesafe.response.ChoiceAnswer;
 import org.springframework.util.Assert;
 
 /**
- * Confidence as a second decision axis: the answer says <em>what</em>, this says whether to
- * act on it unattended.
+ * Confidence as a second decision axis: the answer says <em>what</em>, this says whether
+ * to act on it unattended.
  *
  * <p>
  * Confidence is a statistic over the answer's own distribution, so a low value means the
- * options did not separate for this input — not that the answer is wrong. That makes it the
- * right signal for deciding how much autonomy to grant, and the wrong signal for deciding
- * correctness.
+ * options did not separate for this input — not that the answer is wrong. That makes it
+ * the right signal for deciding how much autonomy to grant, and the wrong signal for
+ * deciding correctness.
  *
  * <p>
  * A floor applies to every action. Above it, each action can demand more in proportion to
@@ -118,7 +116,8 @@ public final class JevConfidenceGate {
 
 	/**
 	 * @param action the action
-	 * @return the confidence that action demands, which is the floor when none was declared
+	 * @return the confidence that action demands, which is the floor when none was
+	 * declared
 	 */
 	public double requiredFor(String action) {
 		return this.required.getOrDefault(action, this.floor);
@@ -175,10 +174,9 @@ public final class JevConfidenceGate {
 
 		public JevConfidenceGate build() {
 			this.required.forEach((action, confidence) -> Assert.isTrue(confidence >= this.floor,
-					"action '" + action + "' demands less confidence (" + confidence + ") than the floor ("
-							+ this.floor + "), which it can never reach"));
-			return new JevConfidenceGate(this.floor,
-					Collections.unmodifiableMap(new LinkedHashMap<>(this.required)));
+					"action '" + action + "' demands less confidence (" + confidence + ") than the floor (" + this.floor
+							+ "), which it can never reach"));
+			return new JevConfidenceGate(this.floor, Collections.unmodifiableMap(new LinkedHashMap<>(this.required)));
 		}
 
 	}

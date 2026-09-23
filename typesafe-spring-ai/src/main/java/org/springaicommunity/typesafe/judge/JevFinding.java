@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.response.Answer;
 

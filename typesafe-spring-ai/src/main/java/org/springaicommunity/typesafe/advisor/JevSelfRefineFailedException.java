@@ -16,9 +16,6 @@
 
 package org.springaicommunity.typesafe.advisor;
 
-
-
-
 import org.springaicommunity.typesafe.exception.TypeSafeException;
 import org.springaicommunity.typesafe.judge.JevVerdict;
 
