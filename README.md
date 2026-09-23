@@ -121,6 +121,8 @@ mkdocs serve
 ## Links
 
 - [Reference documentation](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/)
+- [Changes](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/changes/): what changed in each
+  release, breaking changes and how to migrate
 - [TypeSafe AI documentation](https://docs.typesafe.ai/introduction) and
   [cookbooks](https://docs.typesafe.ai/cookbooks)
 - [Spring AI reference](https://docs.spring.io/spring-ai/reference/)

@@ -2,7 +2,7 @@
 
 ## 0.2.0 (unreleased)
 
-0.2.0 expands the [Model-as-a-Judge](judge/JevJudge.md) API: code checks alongside Jev
+0.2.0 expands the [Model-as-a-judge](judge/JevJudge.md) API: code checks alongside Jev
 questions, a typed judge input, criteria that depend on other answers, outcomes that say
 *why* a criterion was not decided, and confidence gating on the verdict rather than the
 distribution. The self-refine advisor now re-runs tools on a retry while still showing the
