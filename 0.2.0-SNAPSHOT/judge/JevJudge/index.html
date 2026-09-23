@@ -412,6 +412,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changes/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changes
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -989,6 +1008,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#code-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#builder-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -996,6 +1026,34 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Builder Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#criteria-that-only-sometimes-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Criteria that only sometimes apply
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#criteria-that-depend-on-other-answers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Criteria that depend on other answers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1596,6 +1654,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1689,6 +1774,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#code-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code criteria
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#builder-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1696,6 +1792,34 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Builder Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#criteria-that-only-sometimes-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Criteria that only sometimes apply
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#criteria-that-depend-on-other-answers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Criteria that depend on other answers
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1816,14 +1940,16 @@
 criterion is answered against the same state in a single call, in parallel, and each keeps
 its own threshold.</p>
 <h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
-<p>A judge holds a list of criteria. Each is a <a href="../../concepts/primitives/">primitive</a> plus what
+<p>A judge holds a list of criteria. Most are a <a href="../../concepts/primitives/">primitive</a> plus what
 counts as passing it:</p>
 <ul>
 <li>a <strong>noul</strong> passes when its truth value reaches a minimum</li>
 <li>a <strong>score</strong> passes when it reaches a level on your rubric</li>
 <li>a <strong>choice</strong> passes when the selected label is one you accept</li>
 </ul>
-<p><code>judge(...)</code> sends them all in one request and returns a <code>JevVerdict</code>: whether everything
+<p>The rest are <a href="#code-criteria"><strong>code checks</strong></a>: plain Java predicates for anything the input
+already settles, such as whether a tool was called. They never reach Jev.</p>
+<p><code>judge(...)</code> sends every question in one request and returns a <code>JevVerdict</code>: whether everything
 passed, a finding per criterion, the raw response, and feedback synthesised from the
 criteria that did not.</p>
 <h2 id="class-diagram">Class diagram<a class="headerlink" href="#class-diagram" title="Permanent link">&para;</a></h2>
@@ -1836,8 +1962,11 @@ criteria that did not.</p>
         +noul(String, Noul, double) Builder
         +score(String, Score, double) Builder
         +choice(String, Choice, String[]) Builder
+        +check(String, Predicate~JevJudgeInput~, String) Builder
         +criterion(JevCriterion) Builder
         +minConfidence(double) Builder
+        +failOnError(boolean) Builder
+        +failFast(boolean) Builder
         +failOnInconclusive(boolean) Builder
         +build() JevJudge
     }
@@ -1846,17 +1975,32 @@ criteria that did not.</p>
         +String QUESTION_FIELD$
         +String ANSWER_FIELD$
         +judge(String, String) JevVerdict
+        +judge(JevJudgeInput) JevVerdict
         +judge(JsonContent) JevVerdict
         +criteria() List~JevCriterion~
         +builder(TypeSafeClient)$ Builder
     }
 
     class JevCriterion {
+        &lt;&lt;sealed interface&gt;&gt;
+        +name() String
+    }
+
+    class QuestionCriterion {
         &lt;&lt;record&gt;&gt;
         +String name
         +Question question
         +double minimum
         +Set~String~ acceptedOptions
+        +Predicate~JevJudgeInput~ appliesWhen
+        +Dependency dependsOn
+    }
+
+    class CodeCriterion {
+        &lt;&lt;record&gt;&gt;
+        +String name
+        +Predicate~JevJudgeInput~ check
+        +String defect
     }
 
     class Question {
@@ -1865,12 +2009,14 @@ criteria that did not.</p>
 
     Builder ..&gt; JevJudge : builds
     JevJudge "1" *-- "1..*" JevCriterion : holds
-    JevCriterion --&gt; Question : the primitive asked
+    JevCriterion &lt;|.. QuestionCriterion
+    JevCriterion &lt;|.. CodeCriterion
+    QuestionCriterion --&gt; Question : the primitive asked
 
     note for Question "permits Noul, Choice, Score"</code></pre>
 <p>The shape to take from this: a judge is <strong>a list of criteria and nothing else</strong>. It holds a
-<code>TypeSafeClient</code> and spends exactly one call per <code>judge(...)</code>, whatever the number of
-criteria — see <a href="#reading-the-verdict">what comes back</a> for the other half.</p>
+<code>TypeSafeClient</code> and spends at most one call per <code>judge(...)</code>, whatever the number of
+criteria. It makes none when no question applies, or when <code>failFast</code> skips it. Code checks run locally and add nothing to that — see <a href="#reading-the-verdict">what comes back</a> for the other half.</p>
 <h2 id="how-jevjudge-the-advisor-and-the-evaluator-fit-together">How JevJudge, the advisor and the evaluator fit together<a class="headerlink" href="#how-jevjudge-the-advisor-and-the-evaluator-fit-together" title="Permanent link">&para;</a></h2>
 <p>These three are a <strong>hub and two spokes</strong>, not a chain. <code>JevJudge</code> is the engine; the other
 two are independent adapters that put it behind a Spring AI extension point. Neither spoke
@@ -1954,6 +2100,11 @@ questions cannot come back malformed, and keeps the dimensions separate.</p>
 <td>indistinguishable from failed</td>
 <td>reported as <code>INCONCLUSIVE</code></td>
 </tr>
+<tr>
+<td><strong>Could not judge</strong></td>
+<td>indistinguishable from failed</td>
+<td>reported as <code>ERROR</code></td>
+</tr>
 </tbody>
 </table>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
@@ -1969,26 +2120,111 @@ questions cannot come back malformed, and keeps the dimensions separate.</p>
 </span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">        </span><span class="p">.</span><span class="na">instructions</span><span class="p">(</span><span class="s">"Are the numeric values in `assistant_answer` physically plausible?"</span><span class="p">)</span>
 </span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">        </span><span class="p">.</span><span class="na">whenFalse</span><span class="p">(</span><span class="s">"At least one value is impossible"</span><span class="p">)</span>
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">(),</span><span class="w"> </span><span class="mf">0.7d</span><span class="p">)</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="p">.</span><span class="na">minConfidence</span><span class="p">(</span><span class="mf">0.5d</span><span class="p">)</span>
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>
-</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="n">JevVerdict</span><span class="w"> </span><span class="n">verdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">judge</span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">question</span><span class="p">,</span><span class="w"> </span><span class="n">answer</span><span class="p">);</span>
-</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>
-</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">verdict</span><span class="p">.</span><span class="na">passed</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">verdict</span><span class="p">.</span><span class="na">feedback</span><span class="p">());</span>
-</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="p">}</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="n">JevVerdict</span><span class="w"> </span><span class="n">verdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">judge</span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">question</span><span class="p">,</span><span class="w"> </span><span class="n">answer</span><span class="p">);</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">verdict</span><span class="p">.</span><span class="na">passed</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">println</span><span class="p">(</span><span class="n">verdict</span><span class="p">.</span><span class="na">feedback</span><span class="p">());</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="p">}</span>
 </span></code></pre></div>
 <h2 id="the-state-a-judge-builds">The state a judge builds<a class="headerlink" href="#the-state-a-judge-builds" title="Permanent link">&para;</a></h2>
 <p><code>judge(String question, String answer)</code> builds a two-field state:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"user_question"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="p">,</span><span class="w"> </span><span class="nt">"assistant_answer"</span><span class="p">:</span><span class="w"> </span><span class="s2">"..."</span><span class="w"> </span><span class="p">}</span>
 </span></code></pre></div>
-<p>Those field names are <code>JevJudge.QUESTION_FIELD</code> and <code>JevJudge.ANSWER_FIELD</code> — write your
-instructions against them, as the example above does.</p>
-<p>For anything that is not a question-and-answer pair, pass the state yourself:</p>
-<div class="highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">JevVerdict</span><span class="w"> </span><span class="n">verdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">judge</span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">JsonContent</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">        </span><span class="s">"passage"</span><span class="p">,</span><span class="w"> </span><span class="n">retrievedText</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">        </span><span class="s">"claim"</span><span class="p">,</span><span class="w">   </span><span class="n">claimUnderTest</span><span class="p">)));</span>
+<p>When there is more to judge against, build a <code>JevJudgeInput</code>. Its fields become the state
+under fixed names, the same wherever a judge is used, so write your instructions against
+them:</p>
+<table>
+<thead>
+<tr>
+<th>Builder method</th>
+<th>State field</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>question(String)</code></td>
+<td><code>user_question</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>answer(String)</code></td>
+<td><code>assistant_answer</code></td>
+<td>string</td>
+</tr>
+<tr>
+<td><code>expected(Object)</code></td>
+<td><code>expected_output</code></td>
+<td>any JSON value: the reference to judge against</td>
+</tr>
+<tr>
+<td><code>context(String)</code> / <code>context(List&lt;String&gt;)</code></td>
+<td><code>supporting_context</code></td>
+<td>array, one entry per document</td>
+</tr>
+<tr>
+<td><code>toolCall(ToolCall)</code> / <code>toolCalls(List&lt;ToolCall&gt;)</code></td>
+<td><code>tool_calls</code></td>
+<td>array of <code>{name, arguments, result}</code></td>
+</tr>
+<tr>
+<td><code>field(String, Object)</code></td>
+<td>the name you give</td>
+<td>anything else</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">JevVerdict</span><span class="w"> </span><span class="n">verdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">judge</span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">JevJudgeInput</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">        </span><span class="p">.</span><span class="na">question</span><span class="p">(</span><span class="s">"Will I need an umbrella in Dublin tomorrow?"</span><span class="p">)</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">        </span><span class="p">.</span><span class="na">answer</span><span class="p">(</span><span class="n">answer</span><span class="p">)</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">        </span><span class="p">.</span><span class="na">expected</span><span class="p">(</span><span class="s">"Rain is likely; bring an umbrella."</span><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="p">.</span><span class="na">field</span><span class="p">(</span><span class="s">"search_required"</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">)</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">        </span><span class="p">.</span><span class="na">toolCalls</span><span class="p">(</span><span class="n">toolCalls</span><span class="p">)</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">());</span>
 </span></code></pre></div>
+<p>Empty context and tool-call lists are left out rather than sent as empty arrays, so a
+criterion can tell "no evidence" from "evidence that says nothing". The constants live on
+<code>JevJudgeInput</code> (<code>QUESTION_FIELD</code>, <code>EXPECTED_FIELD</code>, <code>TOOL_CALLS_FIELD</code>, ...).</p>
+<p>For anything that is not a question-and-answer pair, pass the state yourself:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">JevVerdict</span><span class="w"> </span><span class="n">verdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">judge</span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">JsonContent</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">        </span><span class="s">"passage"</span><span class="p">,</span><span class="w"> </span><span class="n">retrievedText</span><span class="p">,</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">        </span><span class="s">"claim"</span><span class="p">,</span><span class="w">   </span><span class="n">claimUnderTest</span><span class="p">)));</span>
+</span></code></pre></div>
+<h2 id="code-criteria">Code criteria<a class="headerlink" href="#code-criteria" title="Permanent link">&para;</a></h2>
+<p>Some criteria need no model, because the answer is already in the input: whether the agent
+searched when it had to, whether the answer parses, whether it matches the expected output
+exactly. Declare those as <strong>checks</strong>:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">JevJudge</span><span class="w"> </span><span class="n">judge</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">JevJudge</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">typeSafeClient</span><span class="p">)</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="p">.</span><span class="na">check</span><span class="p">(</span><span class="s">"matches_search_expectation"</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">           </span><span class="n">input</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">!</span><span class="n">input</span><span class="p">.</span><span class="na">toolCalls</span><span class="p">().</span><span class="na">isEmpty</span><span class="p">()</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">                   </span><span class="o">==</span><span class="w"> </span><span class="n">Boolean</span><span class="p">.</span><span class="na">TRUE</span><span class="p">.</span><span class="na">equals</span><span class="p">(</span><span class="n">input</span><span class="p">.</span><span class="na">field</span><span class="p">(</span><span class="s">"search_required"</span><span class="p">,</span><span class="w"> </span><span class="n">Boolean</span><span class="p">.</span><span class="na">class</span><span class="p">)),</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">           </span><span class="s">"searched when no search was required, or skipped a required search"</span><span class="p">)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="p">.</span><span class="na">noul</span><span class="p">(</span><span class="s">"is_grounded"</span><span class="p">,</span><span class="w"> </span><span class="n">groundedNoul</span><span class="p">,</span><span class="w"> </span><span class="mf">0.7d</span><span class="p">)</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span></code></pre></div>
+<p>A check is a <code>Predicate&lt;JevJudgeInput&gt;</code> plus the defect to report when it returns <code>false</code>.</p>
+<ul>
+<li><strong>It never reaches Jev.</strong> Checks run locally before the call. Only the questions are
+  sent, still in one request.</li>
+<li><strong>It lands in the same verdict.</strong> A failed check is a <code>FAILED</code> finding: it fails the
+  verdict, its defect goes into the feedback and it shows in <code>summary()</code>. Its <code>answer</code> is
+  <code>null</code>, since there is no model answer.</li>
+<li><strong>A check that throws is a bug, not a verdict.</strong> The exception propagates out of
+  <code>judge(...)</code> before any request is made.</li>
+<li><strong>A judge needs at least one question.</strong> A judge of checks alone would be a plain
+  predicate.</li>
+</ul>
+<p><code>judge(JsonContent)</code> works with checks too. They read the state through
+<code>JevJudgeInput.of(state)</code> and its <code>field(name, type)</code> reader, which requires the state to be
+a JSON object.</p>
+<div class="admonition tip">
+<p class="admonition-title">Do not ask a model a question code can answer</p>
+<p>Reproducing LangChain's jev-as-a-judge benchmark, the single wrong judgement out of
+fifteen was a question a one-line comparison settles exactly. Moving it into a check
+raised accuracy from 0.8 to 1.0 and lowered variance.</p>
+</div>
 <h2 id="builder-configuration">Builder Configuration<a class="headerlink" href="#builder-configuration" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2019,22 +2255,40 @@ instructions against them, as the example above does.</p>
 <td>A criterion passing when the label is accepted. Validates the labels exist on the choice.</td>
 </tr>
 <tr>
+<td><code>check(String, Predicate&lt;JevJudgeInput&gt;, String)</code></td>
+<td>—</td>
+<td>—</td>
+<td>A <a href="#code-criteria">code check</a>: passes when the predicate returns <code>true</code>, otherwise reports the defect.</td>
+</tr>
+<tr>
 <td><code>criterion(JevCriterion)</code></td>
 <td>—</td>
 <td>—</td>
-<td>Add a pre-built criterion.</td>
+<td>Add a pre-built criterion of either kind.</td>
 </tr>
 <tr>
 <td><code>minConfidence(double)</code></td>
 <td><code>double</code></td>
-<td><code>0.5</code></td>
-<td>Below this, a choice or score is <code>INCONCLUSIVE</code>. Nouls carry no confidence and are unaffected.</td>
+<td><code>0.6</code></td>
+<td>How much of a choice's or score's probability must support its verdict; below it, <code>INCONCLUSIVE</code>. See <a href="#low-confidence-is-undecided-not-failed">decisive, not peaked</a>. Nouls are unaffected.</td>
 </tr>
 <tr>
 <td><code>failOnInconclusive(boolean)</code></td>
 <td><code>boolean</code></td>
 <td><code>false</code></td>
 <td>Treat an undecided criterion as a failure.</td>
+</tr>
+<tr>
+<td><code>failOnError(boolean)</code></td>
+<td><code>boolean</code></td>
+<td><code>false</code></td>
+<td>Treat a criterion the service could not answer (<code>ERROR</code>) as a failure.</td>
+</tr>
+<tr>
+<td><code>failFast(boolean)</code></td>
+<td><code>boolean</code></td>
+<td><code>false</code></td>
+<td>When a code check fails, skip the Jev call; the questions become <code>NOT_APPLICABLE</code>.</td>
 </tr>
 <tr>
 <td><code>feedbackRenderer(Function&lt;List&lt;JevFinding&gt;, String&gt;)</code></td>
@@ -2044,7 +2298,51 @@ instructions against them, as the example above does.</p>
 </tr>
 </tbody>
 </table>
-<p>Criterion names must be unique, and a judge needs at least one.</p>
+<p>Criterion names must be unique across both kinds, and a judge needs at least one question
+criterion.</p>
+<h3 id="criteria-that-only-sometimes-apply">Criteria that only sometimes apply<a class="headerlink" href="#criteria-that-only-sometimes-apply" title="Permanent link">&para;</a></h3>
+<p>A question can be made conditional with <code>appliesWhen</code>. When the predicate returns <code>false</code>
+the question is not sent, and its finding is <code>NOT_APPLICABLE</code>: it neither passes nor fails.
+A groundedness check on a turn with no retrieved context is the typical case:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">JevJudge</span><span class="w"> </span><span class="n">judge</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">JevJudge</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">typeSafeClient</span><span class="p">)</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="p">.</span><span class="na">criterion</span><span class="p">(</span><span class="n">JevCriterion</span><span class="p">.</span><span class="na">noul</span><span class="p">(</span><span class="s">"is_grounded"</span><span class="p">,</span><span class="w"> </span><span class="n">groundedNoul</span><span class="p">,</span><span class="w"> </span><span class="mf">0.7d</span><span class="p">)</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">        </span><span class="p">.</span><span class="na">appliesWhen</span><span class="p">(</span><span class="n">input</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">!</span><span class="n">input</span><span class="p">.</span><span class="na">context</span><span class="p">().</span><span class="na">isEmpty</span><span class="p">()))</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="p">.</span><span class="na">noul</span><span class="p">(</span><span class="s">"is_relevant"</span><span class="p">,</span><span class="w"> </span><span class="n">relevantNoul</span><span class="p">,</span><span class="w"> </span><span class="mf">0.7d</span><span class="p">)</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span></code></pre></div>
+<p>When no question applies, no call is made and <code>verdict.response()</code> is <code>null</code>.</p>
+<h3 id="criteria-that-depend-on-other-answers">Criteria that depend on other answers<a class="headerlink" href="#criteria-that-depend-on-other-answers" title="Permanent link">&para;</a></h3>
+<p>Rubrics branch. An answer that asks which Springfield is meant should not be marked down for
+leaving out the forecast's timing. <code>whenChosen</code> and <code>whenPassed</code> make a question depend on
+another criterion's outcome:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">JevJudge</span><span class="w"> </span><span class="n">judge</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">JevJudge</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">typeSafeClient</span><span class="p">)</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">    </span><span class="p">.</span><span class="na">choice</span><span class="p">(</span><span class="s">"mode"</span><span class="p">,</span><span class="w"> </span><span class="n">Choice</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">        </span><span class="p">.</span><span class="na">instructions</span><span class="p">(</span><span class="s">"How does `assistant_answer` respond to `user_question`?"</span><span class="p">)</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">        </span><span class="p">.</span><span class="na">option</span><span class="p">(</span><span class="s">"answered"</span><span class="p">,</span><span class="w"> </span><span class="s">"Gives the weather"</span><span class="p">)</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">        </span><span class="p">.</span><span class="na">option</span><span class="p">(</span><span class="s">"clarification_needed"</span><span class="p">,</span><span class="w"> </span><span class="s">"Asks which place is meant"</span><span class="p">)</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">(),</span><span class="w"> </span><span class="s">"answered"</span><span class="p">,</span><span class="w"> </span><span class="s">"clarification_needed"</span><span class="p">)</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="p">.</span><span class="na">criterion</span><span class="p">(</span><span class="n">JevCriterion</span><span class="p">.</span><span class="na">noul</span><span class="p">(</span><span class="s">"has_details"</span><span class="p">,</span><span class="w"> </span><span class="n">detailsNoul</span><span class="p">,</span><span class="w"> </span><span class="mf">0.7d</span><span class="p">)</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">        </span><span class="p">.</span><span class="na">whenChosen</span><span class="p">(</span><span class="s">"mode"</span><span class="p">,</span><span class="w"> </span><span class="s">"answered"</span><span class="p">))</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span></code></pre></div>
+<ul>
+<li><strong>The branch costs nothing.</strong> Jev answers every question in one parallel call, so
+  <code>has_details</code> is asked anyway, and the dependency is resolved in Java afterwards. Other
+  judge frameworks walk such a graph one model call per node.</li>
+<li>When the choice lands elsewhere, the dependent is <code>NOT_APPLICABLE</code>, with detail
+  <code>has_details: does not apply, mode was "clarification_needed"</code>. It neither passes nor
+  fails.</li>
+<li>An undecided dependency (<code>INCONCLUSIVE</code>, <code>ERROR</code> or <code>NOT_APPLICABLE</code>) makes its dependents
+  <code>NOT_APPLICABLE</code> too: nothing was selected for them to rely on.</li>
+<li><code>whenPassed("name")</code> depends on a criterion having passed. That criterion can be a
+  <a href="#code-criteria">code check</a>.</li>
+<li>A dependency must be declared <strong>before</strong> its dependents, which rules out cycles. A
+  <code>whenChosen</code> label must be one of the choice's options. Both are checked when the judge is
+  built.</li>
+</ul>
+<p><code>appliesWhen</code> and a dependency combine. <code>appliesWhen</code> is judged on the input before the call,
+and a false result means the question is not sent at all. The dependency is judged on the
+findings after the call.</p>
 <h2 id="reading-the-verdict">Reading the verdict<a class="headerlink" href="#reading-the-verdict" title="Permanent link">&para;</a></h2>
 <p><code>judge(...)</code> returns one verdict carrying one finding per criterion, so the dimensions stay
 separate rather than collapsing into a number:</p>
@@ -2059,6 +2357,8 @@ separate rather than collapsing into a number:</p>
         +String feedback
         +failures() List~JevFinding~
         +inconclusive() List~JevFinding~
+        +errors() List~JevFinding~
+        +notApplicable() List~JevFinding~
         +summary() String
     }
 
@@ -2077,6 +2377,8 @@ separate rather than collapsing into a number:</p>
         PASSED
         FAILED
         INCONCLUSIVE
+        ERROR
+        NOT_APPLICABLE
     }
 
     class Answer {
@@ -2089,24 +2391,68 @@ separate rather than collapsing into a number:</p>
 
     note for Answer "permits NoulAnswer, ChoiceAnswer,\nScoreAnswer, UnknownAnswer"</code></pre>
 <p><code>response</code> is the untouched <code>SystemOneResponse</code>, so the usage counts and the request id are
-there when you need them.</p>
-<div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">record</span> <span class="nc">JevVerdict</span><span class="p">(</span><span class="kt">boolean</span><span class="w"> </span><span class="n">passed</span><span class="p">,</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="n">findings</span><span class="p">,</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">                         </span><span class="n">SystemOneResponse</span><span class="w"> </span><span class="n">response</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">feedback</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">failures</span><span class="p">();</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">inconclusive</span><span class="p">();</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="nf">summary</span><span class="p">();</span><span class="w">   </span><span class="c1">// passed=false [helpfulness=PASSED, is_plausible=FAILED]</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="p">}</span>
+there when you need them. It is <code>null</code> when no question was asked: every question was not
+applicable, or <code>failFast</code> skipped the call.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kd">public</span><span class="w"> </span><span class="kd">record</span> <span class="nc">JevVerdict</span><span class="p">(</span><span class="kt">boolean</span><span class="w"> </span><span class="n">passed</span><span class="p">,</span><span class="w"> </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="n">findings</span><span class="p">,</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">                         </span><span class="nd">@Nullable</span><span class="w"> </span><span class="n">SystemOneResponse</span><span class="w"> </span><span class="n">response</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">feedback</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">failures</span><span class="p">();</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">inconclusive</span><span class="p">();</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">errors</span><span class="p">();</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">    </span><span class="n">List</span><span class="o">&lt;</span><span class="n">JevFinding</span><span class="o">&gt;</span><span class="w"> </span><span class="nf">notApplicable</span><span class="p">();</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="nf">summary</span><span class="p">();</span><span class="w">   </span><span class="c1">// passed=false [helpfulness=PASSED, is_plausible=FAILED]</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="p">}</span>
 </span></code></pre></div>
-<p>Each <code>JevFinding</code> carries its criterion, the raw answer, an <code>Outcome</code> of <code>PASSED</code>, <code>FAILED</code>
-or <code>INCONCLUSIVE</code>, and a <code>detail</code> sentence ready to hand back to a model.</p>
-<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">verdict</span><span class="p">.</span><span class="na">failures</span><span class="p">().</span><span class="na">forEach</span><span class="p">(</span><span class="n">finding</span><span class="w"> </span><span class="o">-&gt;</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">        </span><span class="n">log</span><span class="p">.</span><span class="na">warn</span><span class="p">(</span><span class="s">"{} failed: {}"</span><span class="p">,</span><span class="w"> </span><span class="n">finding</span><span class="p">.</span><span class="na">name</span><span class="p">(),</span><span class="w"> </span><span class="n">finding</span><span class="p">.</span><span class="na">detail</span><span class="p">()));</span>
+<p>Each <code>JevFinding</code> carries its criterion, the raw answer (<code>null</code> for a code check or a
+criterion that did not apply), an <code>Outcome</code>, and a <code>detail</code> sentence ready to hand back to a
+model. Only <code>FAILED</code> blocks the verdict:</p>
+<table>
+<thead>
+<tr>
+<th>Outcome</th>
+<th>Meaning</th>
+<th>Blocks?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PASSED</code></td>
+<td>the criterion was met</td>
+<td>no</td>
+</tr>
+<tr>
+<td><code>FAILED</code></td>
+<td>the criterion was not met</td>
+<td><strong>yes</strong></td>
+</tr>
+<tr>
+<td><code>INCONCLUSIVE</code></td>
+<td>too little probability supported the verdict</td>
+<td>only with <code>failOnInconclusive(true)</code></td>
+</tr>
+<tr>
+<td><code>ERROR</code></td>
+<td>the service returned no answer, or one this SDK cannot read</td>
+<td>only with <code>failOnError(true)</code></td>
+</tr>
+<tr>
+<td><code>NOT_APPLICABLE</code></td>
+<td>not asked (<code>appliesWhen</code> was false, or <code>failFast</code> skipped the call), or asked but its dependency (<code>whenChosen</code>, <code>whenPassed</code>) was not met, so its answer is set aside</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
+<p><code>ERROR</code> and <code>NOT_APPLICABLE</code> findings are left out of the feedback, since neither is a
+defect the model can fix. <code>failOnInconclusive(true)</code> and <code>failOnError(true)</code> make a finding
+block by reporting it as <code>FAILED</code>: it then appears in <code>failures()</code> and in the feedback, not
+in <code>inconclusive()</code> or <code>errors()</code>.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">verdict</span><span class="p">.</span><span class="na">failures</span><span class="p">().</span><span class="na">forEach</span><span class="p">(</span><span class="n">finding</span><span class="w"> </span><span class="o">-&gt;</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">        </span><span class="n">log</span><span class="p">.</span><span class="na">warn</span><span class="p">(</span><span class="s">"{} failed: {}"</span><span class="p">,</span><span class="w"> </span><span class="n">finding</span><span class="p">.</span><span class="na">name</span><span class="p">(),</span><span class="w"> </span><span class="n">finding</span><span class="p">.</span><span class="na">detail</span><span class="p">()));</span>
 </span></code></pre></div>
 <h2 id="feedback-is-synthesised-not-generated">Feedback is synthesised, not generated<a class="headerlink" href="#feedback-is-synthesised-not-generated" title="Permanent link">&para;</a></h2>
 <p>Jev returns numbers, never prose, so the feedback is built by the SDK from the answer and
 the rubric you wrote. It is deterministic and more specific than a judge model's commentary:</p>
-<div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>helpfulness: rated "Mostly unhelpful: misses the main point" (1.20), needs to reach 2.00
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>which is "Mostly helpful: minor gaps remain"
+<div class="highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>helpfulness: rated "Mostly unhelpful: misses the main point" (1.20), needs to reach 2.00
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>which is "Mostly helpful: minor gaps remain"
 </span></code></pre></div>
 <p>Two details worth knowing. The level quoted is the one the <em>score</em> lands on, not the most
 probable level — the two can disagree on a spread distribution, and quoting a label that
@@ -2114,11 +2460,21 @@ contradicts the number would be worse than useless. And the wording is formatted
 <code>Locale.ROOT</code>, so <code>0.70</code> does not become <code>0,70</code> on a comma-decimal JVM and change what the
 model reads.</p>
 <h2 id="low-confidence-is-undecided-not-failed">Low confidence is undecided, not failed<a class="headerlink" href="#low-confidence-is-undecided-not-failed" title="Permanent link">&para;</a></h2>
-<p>A flat distribution means the levels or options did not separate well <em>for this state</em>,
-which is not the same as the answer being wrong. Those criteria are <code>INCONCLUSIVE</code> and do
-not block, unless you set <code>failOnInconclusive(true)</code>.</p>
-<p>A criterion the service returns no answer for degrades the same way rather than throwing —
-a partial response should cost you that one criterion, not the whole call.</p>
+<p>A score or choice is decided by where its probability lies. A score <strong>passes</strong> when at least
+half of its probability sits on levels at or above <code>minimum</code>. A choice passes when at least
+half sits on the accepted options, even if the single most likely label is another one.
+Without probabilities, the score's value, or the selected label, decides.</p>
+<p>Whether that verdict can be acted on is not a question of how <em>peaked</em> the distribution is,
+but of how much of it supports the <em>verdict</em>: the share on the passing side when it passes,
+on the failing side when it fails. When that share is below <code>minConfidence</code> (0.6 by default:
+a clear majority, where a coin flip is 0.5), the criterion is <code>INCONCLUSIVE</code>, and it does not
+block unless you set <code>failOnInconclusive(true)</code>.</p>
+<p>The difference matters. This distribution, recorded live, has a <code>confidence</code> of only 0.51
+because it is split between two levels, yet both levels pass a <code>minimum</code> of 2:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>{ "0": 0.00, "1": 0.07, "2": 0.52, "3": 0.41 }   → 0.93 supports the pass → PASSED
+</span></code></pre></div>
+<p>A criterion the service returns no answer for is reported as <code>ERROR</code> rather than thrown, so a
+partial response costs you that one criterion, not the whole call.</p>
 <h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../JevSelfRefineAdvisor/">JevSelfRefineAdvisor</a> — judge and retry inside a <code>ChatClient</code></li>

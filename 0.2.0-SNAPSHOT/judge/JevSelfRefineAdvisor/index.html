@@ -412,6 +412,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changes/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changes
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -995,10 +1014,32 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#where-it-sits-and-why" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it sits, and why
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#failing-hard" class="md-nav__link">
     <span class="md-ellipsis">
       
         Failing hard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-judging-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When judging fails
       
     </span>
   </a>
@@ -1563,6 +1604,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1634,10 +1702,32 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#where-it-sits-and-why" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it sits, and why
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#failing-hard" class="md-nav__link">
     <span class="md-ellipsis">
       
         Failing hard
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-judging-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When judging fails
       
     </span>
   </a>
@@ -1755,7 +1845,7 @@ and, when the response falls short, feeds the defect back into the prompt and tr
     C -- passed --&gt; D[Return response]
     C -- failed --&gt; E[Append defect to prompt]
     E --&gt; B
-    C -- attempts exhausted --&gt; F[Return last response&lt;br/&gt;or throw]</code></pre>
+    C -- attempts exhausted --&gt; F[Return best attempt&lt;br/&gt;or throw]</code></pre>
 <p>The retry prompt is rebuilt from the <strong>original</strong> request each time rather than from the
 previous attempt, so feedback does not compound across attempts.</p>
 <h2 id="quick-start">Quick Start<a class="headerlink" href="#quick-start" title="Permanent link">&para;</a></h2>
@@ -1796,19 +1886,25 @@ previous attempt, so feedback does not compound across attempts.</p>
 <td><code>failOnExhaustedAttempts(boolean)</code></td>
 <td><code>boolean</code></td>
 <td><code>false</code></td>
-<td>Throw <code>JevSelfRefineFailedException</code> instead of returning the best effort.</td>
+<td>Throw <code>JevSelfRefineFailedException</code> instead of returning the best attempt.</td>
 </tr>
 <tr>
 <td><code>skipEvaluationPredicate(BiPredicate&lt;ChatClientRequest, ChatClientResponse&gt;)</code></td>
 <td>—</td>
-<td>skips when the response has tool calls</td>
-<td>A tool call is not an answer yet, so there is nothing to judge.</td>
+<td>skips tool-call responses and <code>returnDirect</code> tool results</td>
+<td>Neither is the model's answer, so there is nothing to judge.</td>
+</tr>
+<tr>
+<td><code>judgeErrorPolicy(JudgeErrorPolicy)</code></td>
+<td><code>JudgeErrorPolicy</code></td>
+<td><code>FAIL_OPEN</code></td>
+<td>What to do when the judging call itself fails. See <a href="#when-judging-fails">when judging fails</a>.</td>
 </tr>
 <tr>
 <td><code>order(int)</code></td>
 <td><code>int</code></td>
-<td><code>LOWEST_PRECEDENCE - 2000</code></td>
-<td>Where in the advisor chain this runs.</td>
+<td><code>DEFAULT_ORDER</code> (<code>LOWEST_PRECEDENCE - 2000</code>)</td>
+<td>Where in the advisor chain this runs; <code>BEFORE_TOOLS_ORDER</code> to re-run tools on a retry. See <a href="#where-it-sits-and-why">where it sits</a>.</td>
 </tr>
 </tbody>
 </table>
@@ -1818,44 +1914,137 @@ previous attempt, so feedback does not compound across attempts.</p>
 judging call, and a criterion the model cannot satisfy would otherwise loop forever.</p>
 </div>
 <h2 id="what-the-judge-can-see">What the judge can see<a class="headerlink" href="#what-the-judge-can-see" title="Permanent link">&para;</a></h2>
-<p>The judged state is the prompt on one side and the final answer on the other. Tool results
-are included when they are present in the prompt — a <code>ToolResponseMessage</code> is unpacked
-rather than dropped, since it carries no text of its own.</p>
-<div class="admonition warning">
-<p class="admonition-title">Internal tool execution hides tool results</p>
-<p>With Spring AI's default <strong>internal</strong> tool execution the model loop runs inside the
-<code>ChatModel</code>, and the intermediate <code>ToolResponseMessage</code>s never reach an advisor at all.</p>
-<p>This matters when writing criteria. A groundedness question phrased as <em>"every claim
-must trace back to the question"</em> will fail a correct tool-using answer, because the
-value the tool returned legitimately appears nowhere in the question. Either phrase the
-criterion against what is actually visible, or disable internal tool execution so the
-tool messages land in the prompt.</p>
+<p>The advisor builds a <a href="../JevJudge/#the-state-a-judge-builds"><code>JevJudgeInput</code></a> from the
+original request and the answer it produced:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Carries</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>user_question</code></td>
+<td>the system message and the user and assistant turns, each prefixed with its role</td>
+</tr>
+<tr>
+<td><code>assistant_answer</code></td>
+<td>the final answer</td>
+</tr>
+<tr>
+<td><code>tool_calls</code></td>
+<td>the tool calls with their results, <code>{name, arguments, result}</code>: read from the prompt at the default order, recorded during the attempt at <code>BEFORE_TOOLS_ORDER</code> (see <a href="#where-it-sits-and-why">where it sits</a>)</td>
+</tr>
+</tbody>
+</table>
+<p>Read from the prompt, a <code>ToolResponseMessage</code> carries no text of its own, so its results are
+unpacked into <code>tool_calls</code> rather than dropped. Each result goes to the earliest open call with the same
+id, or with the same tool name when the provider leaves ids blank (as Google GenAI does), so
+parallel calls and ids reused across turns stay apart. Tool calls of earlier turns still in
+the prompt are included too. Write a groundedness criterion against that field:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">.</span><span class="na">noul</span><span class="p">(</span><span class="s">"is_grounded"</span><span class="p">,</span><span class="w"> </span><span class="n">Noul</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="p">.</span><span class="na">instructions</span><span class="p">(</span><span class="s">"Is every value in `assistant_answer` supported by a result in `tool_calls`?"</span><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="p">.</span><span class="na">whenFalse</span><span class="p">(</span><span class="s">"States a value no tool returned"</span><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">(),</span><span class="w"> </span><span class="mf">0.7d</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Whether a tool was called at all is better settled by a
+<a href="../JevJudge/#code-criteria">code check</a> than asked of Jev.</p>
+<h2 id="where-it-sits-and-why">Where it sits, and why<a class="headerlink" href="#where-it-sits-and-why" title="Permanent link">&para;</a></h2>
+<p>The advisor's position in the chain decides what the judge sees and what a retry can fix.
+<code>ChatClient</code> registers chat memory at <code>HIGHEST_PRECEDENCE + 200</code> and runs the tool loop in a
+<code>ToolCallingAdvisor</code> at <code>HIGHEST_PRECEDENCE + 300</code>. Retrieval
+(<code>RetrievalAugmentationAdvisor</code>) and most application advisors run at order <code>0</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Order</th>
+<th>The judge sees</th>
+<th>A retry</th>
+<th>Fits</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DEFAULT_ORDER</code> (<code>LOWEST_PRECEDENCE - 2000</code>), inside everything above</td>
+<td>the retrieved context and the tool calls, read from the prompt</td>
+<td>re-asks the model with the same context and tool history; retrieval and tools are <strong>not</strong> re-run</td>
+<td>most chains, and anything with retrieval</td>
+</tr>
+<tr>
+<td><code>BEFORE_TOOLS_ORDER</code> (<code>HIGHEST_PRECEDENCE + 250</code>), between memory and the tool loop</td>
+<td>the tool calls, <strong>recorded</strong> during each attempt; <strong>not</strong> the retrieved context</td>
+<td>re-runs the tools, so a tool that returned something wrong can return something else</td>
+<td>tool-heavy chains without retrieval, where a bad tool result is the usual failure</td>
+</tr>
+</tbody>
+</table>
+<p>Both positions sit inside chat memory, so memory records only the answer finally returned.</p>
+<p>At <code>BEFORE_TOOLS_ORDER</code> the attempt's tool traffic never reaches this advisor's prompt, so
+it is recorded instead: for each attempt, the request's tool callbacks are wrapped, and every
+call lands in <code>tool_calls</code> with its arguments and result. That position is also outside every
+advisor at order <code>0</code>: retrieval re-runs on each attempt, with the judge's feedback in its
+query, and the judge's <code>user_question</code> does not contain the retrieved context.</p>
+<div class="admonition note">
+<p class="admonition-title">Recorded tools</p>
+<p>Tools passed as callbacks, through <code>ChatClient.tools(...)</code> or <code>defaultTools(...)</code>, are
+recorded. A tool resolved by name through a <code>ToolCallbackResolver</code> is not. A recorded
+call that threw is noted as <code>error: &lt;message&gt;</code>, which may differ from the text the model
+was shown.</p>
 </div>
+<p>A tool marked <code>returnDirect</code> hands its output straight back as the response. That is not the
+model's answer, so the default <code>skipEvaluationPredicate</code> does not judge it, and no retry
+re-runs the tool.</p>
 <h2 id="failing-hard">Failing hard<a class="headerlink" href="#failing-hard" title="Permanent link">&para;</a></h2>
-<p>By default the advisor returns the best effort once attempts run out, which matches
-self-refine convention. Turn that around where shipping a rejected answer is worse than
-failing:</p>
-<div class="highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">JevSelfRefineAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">judge</span><span class="p">)</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="p">.</span><span class="na">maxRepeatAttempts</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="p">.</span><span class="na">failOnExhaustedAttempts</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span><span class="w">   </span><span class="c1">// throws JevSelfRefineFailedException</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+<p>By default the advisor returns the <strong>best attempt</strong> once attempts run out: the one with the
+most criteria passed net of those failed, the later one on a tie. A later attempt is not
+necessarily a better one, so the last is not returned just for being last; and an attempt
+that <code>failFast</code> or an unmet dependency left mostly unjudged passes little, so it does not win
+by default. Turn that around where shipping a rejected answer is worse than failing:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">JevSelfRefineAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">judge</span><span class="p">)</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="p">.</span><span class="na">maxRepeatAttempts</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="p">.</span><span class="na">failOnExhaustedAttempts</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span><span class="w">   </span><span class="c1">// throws JevSelfRefineFailedException</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
 </span></code></pre></div>
-<div class="highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">JevSelfRefineFailedException</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">    </span><span class="n">log</span><span class="p">.</span><span class="na">error</span><span class="p">(</span><span class="s">"gave up: {}"</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">.</span><span class="na">verdict</span><span class="p">().</span><span class="na">summary</span><span class="p">());</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="n">ex</span><span class="p">.</span><span class="na">verdict</span><span class="p">().</span><span class="na">failures</span><span class="p">().</span><span class="na">forEach</span><span class="p">(</span><span class="n">f</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">log</span><span class="p">.</span><span class="na">error</span><span class="p">(</span><span class="s">"  {}"</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="na">detail</span><span class="p">()));</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">JevSelfRefineFailedException</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="n">log</span><span class="p">.</span><span class="na">error</span><span class="p">(</span><span class="s">"gave up: {}"</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">.</span><span class="na">verdict</span><span class="p">().</span><span class="na">summary</span><span class="p">());</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">ex</span><span class="p">.</span><span class="na">verdict</span><span class="p">().</span><span class="na">failures</span><span class="p">().</span><span class="na">forEach</span><span class="p">(</span><span class="n">f</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">log</span><span class="p">.</span><span class="na">error</span><span class="p">(</span><span class="s">"  {}"</span><span class="p">,</span><span class="w"> </span><span class="n">f</span><span class="p">.</span><span class="na">detail</span><span class="p">()));</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">}</span>
 </span></code></pre></div>
+<h2 id="when-judging-fails">When judging fails<a class="headerlink" href="#when-judging-fails" title="Permanent link">&para;</a></h2>
+<p>A TypeSafe outage says nothing about the answer. By default the advisor <strong>fails open</strong> on
+transient failures: a connection error or timeout, a 408, 429 or 5xx response. These are
+the failures the client itself retries. It logs a warning and returns the response it could
+not judge, rather than failing a chat call whose answer may be fine.</p>
+<p>A client error, such as a bad API key (401), a missing permission (403) or an invalid
+question (400, 422), is a misconfiguration rather than an outage. It is <strong>always rethrown</strong>,
+so it cannot silently turn judging off.</p>
+<p>Where an unjudged answer must never ship, fail closed instead. Every <code>TypeSafeException</code> is
+then rethrown:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">JevSelfRefineAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">judge</span><span class="p">)</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="p">.</span><span class="na">judgeErrorPolicy</span><span class="p">(</span><span class="n">JevSelfRefineAdvisor</span><span class="p">.</span><span class="na">JudgeErrorPolicy</span><span class="p">.</span><span class="na">FAIL_CLOSED</span><span class="p">)</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
+</span></code></pre></div>
+<p>Only failures of the judging call are covered. An exception thrown by one of the judge's
+code checks is a bug in the check, and always propagates.</p>
 <h2 id="ordering-with-the-guardrail-advisor">Ordering with the guardrail advisor<a class="headerlink" href="#ordering-with-the-guardrail-advisor" title="Permanent link">&para;</a></h2>
 <p>The two compose, and they do different jobs.
 <a href="../../guardrails/JevGuardrailAdvisor/"><code>JevGuardrailAdvisor</code></a> defaults to
-<code>LOWEST_PRECEDENCE - 1000</code>, which runs it <em>later</em> — nearer the model — so it screens the
-answer self-refinement settled on rather than an intermediate draft.</p>
-<div class="highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">.</span><span class="na">defaultAdvisors</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="n">JevSelfRefineAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">judge</span><span class="p">(</span><span class="n">judge</span><span class="p">).</span><span class="na">build</span><span class="p">(),</span><span class="w">          </span><span class="c1">// quality, retries</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="n">JevGuardrailAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">typeSafeClient</span><span class="p">).</span><span class="na">build</span><span class="p">())</span><span class="w">          </span><span class="c1">// safety, last word</span>
+<code>LOWEST_PRECEDENCE - 1000</code>, which places it <em>inside</em> the self-refine loop, nearer the model.
+It screens every attempt, so an unsafe draft is replaced by the refusal before it is judged.
+See <a href="../../guardrails/JevGuardrailAdvisor/#where-it-sits">where the guardrail sits</a> for the
+alternative of screening once per turn.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">.</span><span class="na">defaultAdvisors</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="n">JevSelfRefineAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">judge</span><span class="p">(</span><span class="n">judge</span><span class="p">).</span><span class="na">build</span><span class="p">(),</span><span class="w">          </span><span class="c1">// quality, retries</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="n">JevGuardrailAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">typeSafeClient</span><span class="p">).</span><span class="na">build</span><span class="p">())</span><span class="w">          </span><span class="c1">// safety, every attempt</span>
 </span></code></pre></div>
-<p>Retrying does not help a guardrail: an unsafe answer is not a draft.</p>
+<p>Retrying does not help a guardrail: an unsafe answer is not a draft. At these default orders,
+an input the guardrail blocks comes back as the refusal, which the judge then scores, and
+typically fails. So a blocked request can cost up to <code>maxRepeatAttempts</code> further rounds of
+screening and judging before the refusal is returned. Ordering the guardrail outside the
+self-refine advisor avoids that.</p>
 <h2 id="streaming">Streaming<a class="headerlink" href="#streaming" title="Permanent link">&para;</a></h2>
 <p><code>adviseStream</code> is unsupported and returns <code>Flux.error(UnsupportedOperationException)</code>. A
 verdict needs the whole answer, so there is nothing useful to emit incrementally.</p>

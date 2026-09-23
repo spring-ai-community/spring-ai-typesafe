@@ -412,6 +412,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changes/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changes
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -1530,6 +1549,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1719,7 +1765,7 @@ one without changing a line.</p>
 </tr>
 <tr>
 <td><code>getDataList()</code></td>
-<td><code>supporting_context</code> (only when non-empty)</td>
+<td><code>supporting_context</code>, one entry per document (only when non-empty)</td>
 </tr>
 </tbody>
 </table>
@@ -1765,8 +1811,8 @@ without being treated as a failure — the same stance <code>JevVerdict.passed()
 </div>
 <h2 id="supporting-documents">Supporting documents<a class="headerlink" href="#supporting-documents" title="Permanent link">&para;</a></h2>
 <p><code>getDataList()</code> carries the retrieved <code>Document</code>s, which is the evidence a groundedness
-criterion needs. They reach the state as <code>supporting_context</code>, so write such a criterion
-against that field:</p>
+criterion needs. Their texts reach the state as the <code>supporting_context</code> array, one entry per
+document, so write such a criterion against that field:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">JevJudge</span><span class="w"> </span><span class="n">grounded</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">JevJudge</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">typeSafeClient</span><span class="p">)</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">    </span><span class="p">.</span><span class="na">noul</span><span class="p">(</span><span class="s">"is_grounded"</span><span class="p">,</span><span class="w"> </span><span class="n">Noul</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">        </span><span class="p">.</span><span class="na">instructions</span><span class="p">(</span><span class="s">"Is every claim in `assistant_answer` supported by `supporting_context`?"</span><span class="p">)</span>
@@ -1774,8 +1820,9 @@ against that field:</p>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">(),</span><span class="w"> </span><span class="mf">0.7d</span><span class="p">)</span>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
 </span></code></pre></div>
-<p>This is also how a groundedness check gets real evidence in a RAG setting, which the
-<a href="../JevSelfRefineAdvisor/">self-refine advisor</a> cannot do when tool execution is internal.</p>
+<p>This is also how a groundedness check gets real evidence in a RAG setting. The
+<a href="../JevSelfRefineAdvisor/">self-refine advisor</a> sees the retrieved context only at its default
+order, inside the retrieval advisor.</p>
 <h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../JevJudge/">JevJudge</a></li>

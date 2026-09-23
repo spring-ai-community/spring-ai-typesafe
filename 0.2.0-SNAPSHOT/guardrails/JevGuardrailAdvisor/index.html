@@ -412,6 +412,25 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../changes/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changes
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -1147,6 +1166,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#where-it-sits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it sits
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#custom-batteries" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1607,6 +1637,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1704,6 +1761,17 @@
     <span class="md-ellipsis">
       
         Builder Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-it-sits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it sits
       
     </span>
   </a>
@@ -2067,12 +2135,35 @@ what makes the policy testable without a server.</p>
 <td><code>order(int)</code></td>
 <td><code>int</code></td>
 <td><code>LOWEST_PRECEDENCE - 1000</code></td>
-<td>Runs later than the self-refine advisor, so it sees the final answer.</td>
+<td>Nearest the model: screens every model call. See <a href="#where-it-sits">where it sits</a>.</td>
 </tr>
 </tbody>
 </table>
 <p>At least one battery must be set — a guardrail that screens neither direction does nothing,
 and the builder says so.</p>
+<h2 id="where-it-sits">Where it sits<a class="headerlink" href="#where-it-sits" title="Permanent link">&para;</a></h2>
+<p>A higher order value runs <em>later</em> on the way in, nearer the model, and so <em>inside</em> every
+advisor with a lower value. The default, <code>LOWEST_PRECEDENCE - 1000</code>, places the guardrail
+inside both the <a href="../../judge/JevSelfRefineAdvisor/">self-refine advisor</a>'s retry loop (at
+its default <code>LOWEST_PRECEDENCE - 2000</code>, or at <code>BEFORE_TOOLS_ORDER</code>) and Spring AI's tool
+loop (<code>HIGHEST_PRECEDENCE + 300</code>). It therefore runs on <strong>every model call</strong> of a turn, not
+once per turn:</p>
+<ul>
+<li>The <strong>output battery</strong> screens each reply the model produces: every retry attempt, and
+  any text alongside a tool call. A reply that is only a tool call has no text and is
+  skipped. Every answer the self-refine advisor could return has been screened, and an
+  unsafe draft is replaced by the refusal before it is judged.</li>
+<li>The <strong>input battery</strong> screens the user message on each of those calls too, so a turn with
+  retries or tool calls pays for it more than once. On a retry, the message it screens
+  carries the judge's feedback.</li>
+</ul>
+<p>To screen once per turn instead, order the guardrail <em>outside</em> the self-refine advisor, for
+example <code>.order(BaseAdvisor.HIGHEST_PRECEDENCE + 150)</code>. It then sees the original request and
+the answer the turn finally settled on, and a refusal it returns cannot be retried away. The
+cost: an unsafe draft reaches the judge and costs a retry before it is caught. The default
+has a cost of its own: a blocked input returns the refusal, which the judge then scores and
+typically fails, so a blocked request can cost up to <code>maxRepeatAttempts</code> further rounds of
+screening and judging.</p>
 <h2 id="custom-batteries">Custom batteries<a class="headerlink" href="#custom-batteries" title="Permanent link">&para;</a></h2>
 <p>A battery is a set of hazards plus a severity rubric. Each hazard is a noul and the action
 its firing implies:</p>
