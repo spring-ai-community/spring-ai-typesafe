@@ -17,9 +17,11 @@
 package org.springaicommunity.typesafe.chat;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 import io.micrometer.observation.ObservationRegistry;
@@ -53,6 +55,7 @@ import org.springframework.ai.chat.observation.ChatModelObservationDocumentation
 import org.springframework.ai.chat.observation.DefaultChatModelObservationConvention;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.content.MediaContent;
 import org.springframework.ai.model.tool.StructuredOutputChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.util.Assert;
@@ -71,7 +74,11 @@ import org.springframework.util.StringUtils;
  *     .question("severity", Score.of("How severe is the impact?", "Cosmetic", "Degraded", "Outage"))
  *     .build();
  *
- * Triage t = ChatClient.create(triage).prompt().user(ticketText).call().entity(Triage.class);
+ * Triage t = ChatClient.create(triage)
+ *     .prompt()
+ *     .user(ticketText)
+ *     .call()
+ *     .entity(Triage.class, spec -> spec.useProviderStructuredOutput());
  * }</pre>
  *
  * <p>
@@ -88,14 +95,24 @@ import org.springframework.util.StringUtils;
  * JSON schema then arrives in the options rather than as instructions appended to the user
  * message, so the state stays exactly what the caller wrote. The schema is also checked
  * against the questions before any call: a record field with no question, or with a type
- * the answer cannot fill, fails with a message naming the field. Without it, the
- * prompt-based format instructions are recognised by their opening sentence and removed.
+ * the answer cannot fill, fails with a message naming the field, and the reply then holds
+ * exactly the fields the record declares. Without it, the format instructions Spring AI
+ * appends to the last user message are recognised and removed; only JSON-object output is
+ * supported, so list output ({@code ListOutputConverter}) is rejected.
  *
  * <p>
  * What a chat model normally does and this one cannot is refused rather than faked:
  * streaming is unsupported; {@link #getOptions()} are not tool-calling options, so
  * {@code ChatClient} never runs its tool loop and drops any tools it was given; and a
- * prompt that carries tool callbacks directly is rejected. Memory or retrieval advisors
+ * prompt that carries tool callbacks directly is rejected. A message carrying media is
+ * rejected too: Jev classifies text.
+ *
+ * <p>
+ * Do not declare a {@code JevChatModel} as a Spring bean next to the application's real
+ * chat model: with two {@code ChatModel} beans, injecting Spring AI's
+ * {@code ChatClient.Builder} or a bare {@code ChatModel} fails with
+ * {@code NoUniqueBeanDefinitionException}. Build it where its {@code ChatClient} is
+ * created, and expose that client instead. Memory or retrieval advisors
  * do work, but only as a way to put more text into the state.
  *
  * <p>
@@ -129,6 +146,17 @@ public final class JevChatModel implements ChatModel {
 	 */
 	static final String FORMAT_INSTRUCTIONS_START = "Your response should be in JSON format.";
 
+	/**
+	 * A phrase every JSON format block Spring AI appends contains ({@code BeanOutputConverter},
+	 * {@code MapOutputConverter}). A suffix is only removed when it starts with
+	 * {@link #FORMAT_INSTRUCTIONS_START} on its own line and contains this, so a user
+	 * message that merely quotes the opening sentence is left alone.
+	 */
+	static final String FORMAT_INSTRUCTIONS_MARKER = "RFC8259 compliant JSON response";
+
+	/** How {@code ListOutputConverter}'s instructions start; a JSON reply cannot satisfy them. */
+	static final String LIST_FORMAT_INSTRUCTIONS_START = "Respond with only a list of comma-separated values";
+
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 
 	private static final ChatModelObservationConvention DEFAULT_OBSERVATION_CONVENTION = new DefaultChatModelObservationConvention();
@@ -145,13 +173,18 @@ public final class JevChatModel implements ChatModel {
 
 	private final @Nullable ChatModelObservationConvention observationConvention;
 
+	/** Whether the reply is the default JSON object, whose fields a schema can be checked against. */
+	private final boolean defaultRenderer;
+
 	private JevChatModel(TypeSafeClient typeSafeClient, Map<String, Question> questions,
 			Function<Prompt, JsonContent> stateConverter, Function<SystemOneResponse, String> answerRenderer,
-			ObservationRegistry observationRegistry, @Nullable ChatModelObservationConvention observationConvention) {
+			boolean defaultRenderer, ObservationRegistry observationRegistry,
+			@Nullable ChatModelObservationConvention observationConvention) {
 		this.typeSafeClient = typeSafeClient;
 		this.questions = questions;
 		this.stateConverter = stateConverter;
 		this.answerRenderer = answerRenderer;
+		this.defaultRenderer = defaultRenderer;
 		this.observationRegistry = observationRegistry;
 		this.observationConvention = observationConvention;
 	}
@@ -160,17 +193,21 @@ public final class JevChatModel implements ChatModel {
 	public ChatResponse call(Prompt prompt) {
 		Assert.notNull(prompt, "prompt must not be null");
 		rejectTools(prompt.getOptions());
-		checkOutputSchema(prompt.getOptions());
+		rejectListOutput(prompt);
+		Set<String> requestedFields = requestedFields(prompt.getOptions());
+		// The model actually used goes into the observed prompt too, so a direct call with
+		// no options still reports it as the request model.
+		Prompt requested = withModel(prompt);
 
 		ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
-			.prompt(prompt)
+			.prompt(requested)
 			.provider(PROVIDER)
 			.build();
 		ChatResponse chatResponse = ChatModelObservationDocumentation.CHAT_MODEL_OPERATION
 			.observation(this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
 					this.observationRegistry)
 			.observe(() -> {
-				ChatResponse response = classify(prompt);
+				ChatResponse response = classify(requested, requestedFields);
 				observationContext.setResponse(response);
 				return response;
 			});
@@ -178,7 +215,7 @@ public final class JevChatModel implements ChatModel {
 		return chatResponse;
 	}
 
-	private ChatResponse classify(Prompt prompt) {
+	private ChatResponse classify(Prompt prompt, @Nullable Set<String> requestedFields) {
 		SystemOneResponse response = this.typeSafeClient.systemOne(SystemOneRequest.builder()
 			.state(this.stateConverter.apply(prompt))
 			.model(modelOf(prompt.getOptions()))
@@ -189,8 +226,11 @@ public final class JevChatModel implements ChatModel {
 			.finishReason("STOP")
 			.metadata(RESPONSE_METADATA_KEY, response)
 			.build();
-		Generation generation = new Generation(new AssistantMessage(this.answerRenderer.apply(response)),
-				generationMetadata);
+		// With a schema, reply with exactly the fields it asks for: a schema that forbids
+		// additional properties would otherwise reject the answers the record does not use.
+		String reply = (this.defaultRenderer && requestedFields != null) ? answersAsJson(response, requestedFields)
+				: this.answerRenderer.apply(response);
+		Generation generation = new Generation(new AssistantMessage(reply), generationMetadata);
 
 		ChatResponseMetadata.Builder metadata = ChatResponseMetadata.builder()
 			.model(response.model())
@@ -235,26 +275,39 @@ public final class JevChatModel implements ChatModel {
 	 * its type: a choice's label into a string (and into every value of an enum), a noul's
 	 * or score's value into a number. Questions the record does not ask for are fine.
 	 */
-	private void checkOutputSchema(@Nullable ChatOptions options) {
-		if (!(options instanceof StructuredOutputChatOptions structured)
+	/**
+	 * Reads the requested type's schema when it arrived natively, checks it against the
+	 * questions and returns its field names; {@code null} without a schema, or when a custom
+	 * {@code answerRenderer} owns the reply's shape. Every field needs a question of the same
+	 * name whose answer fits its type: a choice's label into a string (and into every value of
+	 * an enum), a noul's or score's value into a floating-point number. Local {@code $ref}s and
+	 * {@code anyOf}/{@code oneOf} alternatives are followed; a field whose schema declares no
+	 * type is accepted unchecked. Questions the type does not ask for are left out of the reply.
+	 */
+	private @Nullable Set<String> requestedFields(@Nullable ChatOptions options) {
+		if (!this.defaultRenderer || !(options instanceof StructuredOutputChatOptions structured)
 				|| !StringUtils.hasText(structured.getOutputSchema())) {
-			return;
+			return null;
 		}
-		JsonNode properties = JSON.readTree(structured.getOutputSchema()).path("properties");
-		for (Map.Entry<String, JsonNode> property : properties.properties()) {
+		JsonNode root = JSON.readTree(structured.getOutputSchema());
+		Set<String> rootTypes = typesOf(alternatives(root, root, 0));
+		if (!rootTypes.isEmpty() && !rootTypes.contains("object")) {
+			throw new IllegalArgumentException("JevChatModel replies with a JSON object, one field per question, "
+					+ "so it cannot produce a " + rootTypes + "; request a record or a class instead");
+		}
+		Set<String> fields = new LinkedHashSet<>();
+		for (Map.Entry<String, JsonNode> property : root.path("properties").properties()) {
 			String field = property.getKey();
 			Question question = this.questions.get(field);
 			if (question == null) {
 				throw new IllegalArgumentException("The requested type has a field '" + field
 						+ "' that no question answers; the questions are " + this.questions.keySet());
 			}
-			JsonNode schema = property.getValue();
+			List<JsonNode> alternatives = alternatives(property.getValue(), root, 0);
 			if (question instanceof Choice choice) {
-				requireType(field, schema, "string", "a choice's label");
-				JsonNode allowed = schema.path("enum");
-				if (allowed.isArray()) {
-					List<String> values = new ArrayList<>();
-					allowed.forEach(value -> values.add(value.asString()));
+				requireType(field, alternatives, "string", "a choice's label");
+				List<String> values = enumValuesOf(alternatives);
+				if (values != null) {
 					choice.criteria().keySet().forEach(option -> {
 						if (!values.contains(option)) {
 							throw new IllegalArgumentException("Field '" + field + "' cannot hold the choice option '"
@@ -264,28 +317,116 @@ public final class JevChatModel implements ChatModel {
 				}
 			}
 			else {
-				requireType(field, schema, "number", "a number");
+				requireType(field, alternatives, "number", "a floating-point number");
 			}
+			fields.add(field);
 		}
+		return fields;
 	}
 
 	/**
-	 * Requires the field's schema type to include {@code expected}. An {@code integer}
-	 * field is rejected for a noul or score: a value such as 0.97 or 1.8 would not fit.
+	 * Flattens a schema into the alternatives a value may match: follows a local
+	 * {@code $ref} and expands {@code anyOf} and {@code oneOf}.
 	 */
-	private static void requireType(String field, JsonNode schema, String expected, String answer) {
-		List<String> types = new ArrayList<>();
-		JsonNode type = schema.path("type");
-		if (type.isArray()) {
-			type.forEach(value -> types.add(value.asString()));
+	private static List<JsonNode> alternatives(JsonNode schema, JsonNode root, int depth) {
+		if (depth > 16) {
+			return List.of(schema);
 		}
-		else if (type.isString()) {
-			types.add(type.asString());
+		JsonNode ref = schema.path("$ref");
+		if (ref.isString() && ref.asString().startsWith("#")) {
+			JsonNode target = root.at(ref.asString().substring(1));
+			return target.isMissingNode() ? List.of(schema) : alternatives(target, root, depth + 1);
 		}
+		List<JsonNode> flattened = new ArrayList<>();
+		for (String keyword : List.of("anyOf", "oneOf")) {
+			JsonNode options = schema.path(keyword);
+			if (options.isArray()) {
+				options.forEach(option -> flattened.addAll(alternatives(option, root, depth + 1)));
+			}
+		}
+		if (flattened.isEmpty()) {
+			flattened.add(schema);
+		}
+		return flattened;
+	}
+
+	/** The declared types across the alternatives, without {@code null}. */
+	private static Set<String> typesOf(List<JsonNode> alternatives) {
+		Set<String> types = new LinkedHashSet<>();
+		for (JsonNode alternative : alternatives) {
+			JsonNode type = alternative.path("type");
+			if (type.isArray()) {
+				type.forEach(value -> types.add(value.asString()));
+			}
+			else if (type.isString()) {
+				types.add(type.asString());
+			}
+		}
+		types.remove("null");
+		return types;
+	}
+
+	/**
+	 * The enum values across the alternatives, or {@code null} when any non-null
+	 * alternative accepts any value.
+	 */
+	private static @Nullable List<String> enumValuesOf(List<JsonNode> alternatives) {
+		List<String> values = new ArrayList<>();
+		for (JsonNode alternative : alternatives) {
+			JsonNode allowed = alternative.path("enum");
+			if (allowed.isArray()) {
+				allowed.forEach(value -> values.add(value.asString()));
+			}
+			else if (!"null".equals(alternative.path("type").asString(""))) {
+				return null;
+			}
+		}
+		return values;
+	}
+
+	/**
+	 * Requires the field's declared types to include {@code expected}. An {@code integer}
+	 * or {@code boolean} field is rejected for a noul or score: a value such as 0.97 or 1.8
+	 * would not fit.
+	 */
+	private static void requireType(String field, List<JsonNode> alternatives, String expected, String answer) {
+		Set<String> types = typesOf(alternatives);
 		if (!types.isEmpty() && !types.contains(expected)) {
 			throw new IllegalArgumentException("Field '" + field + "' is of type " + types + " but receives " + answer
 					+ ", which needs " + expected);
 		}
+	}
+
+	/**
+	 * {@code ListOutputConverter} asks for comma-separated values; the reply is a JSON
+	 * object, which it would split into nonsense.
+	 */
+	private static void rejectListOutput(Prompt prompt) {
+		String last = lastUserText(prompt);
+		if (last != null && last.contains("\n" + LIST_FORMAT_INSTRUCTIONS_START)) {
+			throw new IllegalArgumentException("JevChatModel replies with a JSON object, one field per question; "
+					+ "list output (ListOutputConverter) is not supported, request a record or a class instead");
+		}
+	}
+
+	private Prompt withModel(Prompt prompt) {
+		ChatOptions options = prompt.getOptions();
+		if (options != null && StringUtils.hasText(options.getModel())) {
+			return prompt;
+		}
+		ChatOptions withModel = options == null ? getOptions()
+				: options.mutate().model(this.typeSafeClient.defaultModel()).build();
+		return prompt.mutate().chatOptions(withModel).build();
+	}
+
+	private static @Nullable String lastUserText(Prompt prompt) {
+		List<Message> instructions = prompt.getInstructions();
+		for (int i = instructions.size() - 1; i >= 0; i--) {
+			if (instructions.get(i).getMessageType() == MessageType.USER) {
+				return instructions.get(i).getText();
+			}
+		}
+		return null;
 	}
 
 	private static void rejectTools(@Nullable ChatOptions options) {
@@ -307,21 +448,38 @@ public final class JevChatModel implements ChatModel {
 	 * @return the state
 	 */
 	public static JsonContent defaultState(Prompt prompt) {
+		List<Message> instructions = prompt.getInstructions();
+		int lastUser = -1;
+		for (int i = 0; i < instructions.size(); i++) {
+			if (instructions.get(i).getMessageType() == MessageType.USER) {
+				lastUser = i;
+			}
+		}
 		Map<String, Object> state = new LinkedHashMap<>();
+		List<String> system = new ArrayList<>();
 		List<Map<String, String>> messages = new ArrayList<>();
-		for (Message message : prompt.getInstructions()) {
+		for (int i = 0; i < instructions.size(); i++) {
+			Message message = instructions.get(i);
+			if (message instanceof MediaContent media && !media.getMedia().isEmpty()) {
+				throw new IllegalArgumentException(
+						"JevChatModel classifies text; a " + message.getMessageType().getValue() + " message carries media");
+			}
 			String text = message.getText();
 			if (!StringUtils.hasText(text)) {
 				continue;
 			}
 			if (message.getMessageType() == MessageType.SYSTEM) {
-				state.put(SYSTEM_FIELD, text);
+				system.add(text);
 			}
 			else if (message.getMessageType() == MessageType.USER
 					|| message.getMessageType() == MessageType.ASSISTANT) {
-				String content = message.getMessageType() == MessageType.USER ? withoutFormatInstructions(text) : text;
+				// Format instructions are only ever appended to the latest user message.
+				String content = (i == lastUser) ? withoutFormatInstructions(text) : text;
 				messages.add(Map.of("role", message.getMessageType().getValue(), "content", content));
 			}
+		}
+		if (!system.isEmpty()) {
+			state.put(SYSTEM_FIELD, String.join("\n\n", system));
 		}
 		state.put(MESSAGES_FIELD, messages);
 		return JsonContent.of(state);
@@ -335,8 +493,26 @@ public final class JevChatModel implements ChatModel {
 	 * @return the JSON text
 	 */
 	public static String answersAsJson(SystemOneResponse response) {
+		return answersAsJson(response, null);
+	}
+
+	/**
+	 * The answers as a JSON object, limited to {@code fields} when given.
+	 * @param response the response
+	 * @param fields the fields to include, in their order; {@code null} for every answer
+	 * @return the JSON text
+	 */
+	public static String answersAsJson(SystemOneResponse response, @Nullable Set<String> fields) {
 		Map<String, @Nullable Object> answers = new LinkedHashMap<>();
-		response.answers().forEach((name, answer) -> answers.put(name, valueOf(answer)));
+		if (fields == null) {
+			response.answers().forEach((name, answer) -> answers.put(name, valueOf(answer)));
+		}
+		else {
+			fields.forEach(field -> {
+				Answer answer = response.answers().get(field);
+				answers.put(field, answer == null ? null : valueOf(answer));
+			});
+		}
 		return JSON.writeValueAsString(answers);
 	}
 
@@ -353,9 +529,23 @@ public final class JevChatModel implements ChatModel {
 		return null;
 	}
 
-	static String withoutFormatInstructions(String text) {
-		int start = text.indexOf(FORMAT_INSTRUCTIONS_START);
-		return start < 0 ? text : text.substring(0, start).stripTrailing();
+	/**
+	 * Removes the JSON format instructions {@code ChatClient.entity(...)} appends to a user
+	 * message on the prompt-based path: a suffix that starts with
+	 * {@value #FORMAT_INSTRUCTIONS_START} on its own line and contains
+	 * {@value #FORMAT_INSTRUCTIONS_MARKER}. Anything else, including a message that merely
+	 * quotes the opening sentence, is returned unchanged. The default state applies it to
+	 * the last user message; a custom {@code stateConverter} can call it too.
+	 * @param text a user message's text
+	 * @return the text without the appended instructions
+	 */
+	public static String withoutFormatInstructions(String text) {
+		int start = text.lastIndexOf(FORMAT_INSTRUCTIONS_START);
+		if (start < 0 || (start > 0 && text.charAt(start - 1) != '\n')
+				|| text.indexOf(FORMAT_INSTRUCTIONS_MARKER, start) < 0) {
+			return text;
+		}
+		return text.substring(0, start).stripTrailing();
 	}
 
 	/**
@@ -378,6 +568,8 @@ public final class JevChatModel implements ChatModel {
 		private Function<Prompt, JsonContent> stateConverter = JevChatModel::defaultState;
 
 		private Function<SystemOneResponse, String> answerRenderer = JevChatModel::answersAsJson;
+
+		private boolean defaultRenderer = true;
 
 		private ObservationRegistry observationRegistry = ObservationRegistry.NOOP;
 
@@ -434,6 +626,7 @@ public final class JevChatModel implements ChatModel {
 		public Builder answerRenderer(Function<SystemOneResponse, String> answerRenderer) {
 			Assert.notNull(answerRenderer, "answerRenderer must not be null");
 			this.answerRenderer = answerRenderer;
+			this.defaultRenderer = false;
 			return this;
 		}
 
@@ -464,7 +657,7 @@ public final class JevChatModel implements ChatModel {
 			Assert.notEmpty(this.questions, "a JevChatModel must declare at least one question");
 			return new JevChatModel(this.typeSafeClient,
 					java.util.Collections.unmodifiableMap(new LinkedHashMap<>(this.questions)), this.stateConverter,
-					this.answerRenderer, this.observationRegistry, this.observationConvention);
+					this.answerRenderer, this.defaultRenderer, this.observationRegistry, this.observationConvention);
 		}
 
 	}

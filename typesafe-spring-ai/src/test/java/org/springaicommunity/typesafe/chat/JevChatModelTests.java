@@ -243,7 +243,7 @@ class JevChatModelTests {
 
 	@Test
 	void doesNotRunTheToolLoopEvenWhenChatClientIsGivenTools() {
-		// Plain ChatOptions, so ChatClient keeps no tools and never enters its tool loop.
+		// Not tool-calling options, so ChatClient keeps no tools and never enters its tool loop.
 		respondWith(TRIAGE_RESPONSE);
 
 		String content = ChatClient.builder(triageModel()).defaultTools(new Object() {
@@ -277,11 +277,139 @@ class JevChatModelTests {
 	}
 
 	@Test
-	void stripsOnlyTheFormatInstructionsFromTheUserMessage() {
-		assertThat(JevChatModel
-			.withoutFormatInstructions("Classify this.\n" + JevChatModel.FORMAT_INSTRUCTIONS_START + "\nschema..."))
+	void stripsOnlyAnAppendedFormatBlock() {
+		String format = new org.springframework.ai.converter.BeanOutputConverter<>(Triage.class).getFormat();
+
+		assertThat(JevChatModel.withoutFormatInstructions("Classify this." + System.lineSeparator() + format))
 			.isEqualTo("Classify this.");
+		// A message that merely quotes the opening sentence is the user's content, not an
+		// appended format block.
+		String quoting = "Evaluate this prompt: 'Summarise. " + JevChatModel.FORMAT_INSTRUCTIONS_START
+				+ "' Is it clear?";
+		assertThat(JevChatModel.withoutFormatInstructions(quoting)).isEqualTo(quoting);
 		assertThat(JevChatModel.withoutFormatInstructions("No instructions here.")).isEqualTo("No instructions here.");
+	}
+
+	@Test
+	void stripsOnlyTheLastUserMessage() {
+		String format = new org.springframework.ai.converter.BeanOutputConverter<>(Triage.class).getFormat();
+		String earlier = "An earlier turn." + System.lineSeparator() + format;
+
+		JsonContent state = JevChatModel.defaultState(new Prompt(List.of(new UserMessage(earlier),
+				new UserMessage("The latest turn." + System.lineSeparator() + format))));
+
+		@SuppressWarnings("unchecked")
+		List<Map<String, String>> messages = (List<Map<String, String>>) state.asMap().get(JevChatModel.MESSAGES_FIELD);
+		assertThat(messages).extracting(message -> message.get("content")).containsExactly(earlier, "The latest turn.");
+	}
+
+	@Test
+	void joinsEverySystemMessageInsteadOfKeepingTheLast() {
+		JsonContent state = JevChatModel.defaultState(new Prompt(List.of(new SystemMessage("First rule."),
+				new SystemMessage("Second rule."), new UserMessage(TICKET))));
+
+		assertThat(state.asMap().get(JevChatModel.SYSTEM_FIELD)).isEqualTo("First rule.\n\nSecond rule.");
+	}
+
+	@Test
+	void rejectsAMessageCarryingMedia() {
+		UserMessage withImage = UserMessage.builder()
+			.text(TICKET)
+			.media(org.springframework.ai.content.Media.builder()
+				.mimeType(org.springframework.util.MimeTypeUtils.IMAGE_PNG)
+				.data(new byte[] { 1, 2, 3 })
+				.build())
+			.build();
+
+		assertThatIllegalArgumentException().isThrownBy(() -> triageModel().call(new Prompt(withImage)))
+			.withMessageContaining("carries media");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void repliesWithOnlyTheFieldsTheRecordAsksForSoSchemaValidationPasses() {
+		// The schema forbids additional properties. Replying with every answer would fail
+		// validation and retry, each retry appending the error to the state.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.messages[0].content").value(TICKET))
+			.andRespond(MockTypeSafeServer.jsonResponse(TRIAGE_RESPONSE));
+
+		TeamOnly teamOnly = ChatClient.create(triageModel())
+			.prompt()
+			.user(TICKET)
+			.call()
+			.entity(TeamOnly.class, spec -> spec.useProviderStructuredOutput().validateSchema());
+
+		assertThat(teamOnly).isEqualTo(new TeamOnly("infra"));
+		this.mock.server().verify();
+	}
+
+	@Test
+	void followsASharedEnumReferenceWhenCheckingChoiceOptions() {
+		// An enum used by two fields becomes a $ref into $defs.
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> ChatClient.create(teamPairModel())
+				.prompt()
+				.user(TICKET)
+				.call()
+				.entity(SharedEnum.class, spec -> spec.useProviderStructuredOutput()))
+			.withMessageContaining("cannot hold the choice option 'support'");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void rejectsATargetThatIsNotAnObjectBeforeCallingJev() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> ChatClient.create(triageModel())
+				.prompt()
+				.user(TICKET)
+				.call()
+				.entity(new org.springframework.core.ParameterizedTypeReference<List<Triage>>() {
+				}, spec -> spec.useProviderStructuredOutput()))
+			.withMessageContaining("cannot produce a [array]");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void rejectsListOutputWhichAJsonObjectCannotSatisfy() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> ChatClient.create(triageModel())
+				.prompt()
+				.user(TICKET)
+				.call()
+				.entity(new org.springframework.ai.converter.ListOutputConverter()))
+			.withMessageContaining("list output (ListOutputConverter) is not supported");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void leavesTheSchemaCheckToACustomRenderer() {
+		// A custom renderer owns the reply's shape, so the default field check cannot apply.
+		respondWith(TRIAGE_RESPONSE);
+		JevChatModel model = JevChatModel.builder(this.mock.client())
+			.questions(triageModel().questions())
+			.answerRenderer(response -> "{\"team\":\"x\",\"priority\":\"high\"}")
+			.build();
+
+		UnknownField result = ChatClient.create(model)
+			.prompt()
+			.user(TICKET)
+			.call()
+			.entity(UnknownField.class, spec -> spec.useProviderStructuredOutput());
+
+		assertThat(result).isEqualTo(new UnknownField("x", "high"));
+	}
+
+	record TeamOnly(String team) {
+	}
+
+	record SharedEnum(Team team, Team backupTeam) {
+	}
+
+	private JevChatModel teamPairModel() {
+		Choice teams = Choice.of("Which team?", "infra", "billing", "support");
+		return JevChatModel.builder(this.mock.client()).question("team", teams).question("backupTeam", teams).build();
 	}
 
 	@Test
@@ -314,6 +442,30 @@ class JevChatModelTests {
 				.contains(tuple("gen_ai.response.id", "req_0123456789"), tuple("gen_ai.usage.input_tokens", "210"),
 						tuple("gen_ai.usage.output_tokens", "18"));
 		});
+	}
+
+	@Test
+	void reportsTheDefaultModelAsTheRequestModelOnADirectCall() {
+		respondWith(TRIAGE_RESPONSE);
+		List<Observation.Context> stopped = new CopyOnWriteArrayList<>();
+		ObservationRegistry registry = ObservationRegistry.create();
+		registry.observationConfig().observationHandler(new ObservationHandler<>() {
+			@Override
+			public boolean supportsContext(Observation.Context context) {
+				return true;
+			}
+
+			@Override
+			public void onStop(Observation.Context context) {
+				stopped.add(context);
+			}
+		});
+
+		observedModel(registry).call(new Prompt(TICKET));
+
+		assertThat(stopped).singleElement()
+			.satisfies(context -> assertThat(context.getLowCardinalityKeyValues()).extracting(KeyValue::getKey, KeyValue::getValue)
+				.contains(tuple("gen_ai.request.model", "jev-latest")));
 	}
 
 	@Test

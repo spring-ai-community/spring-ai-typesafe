@@ -15,12 +15,10 @@ typed questions with numbers. `JevChatModel` keeps Jev what it is:
 
 - **The questions are fixed when the model is built.** The prompt only supplies the state
   they are answered against. Nothing is inferred from prose.
-- **The reply is the answers as JSON,** one field per question. `ChatClient.entity(...)`
+- **The reply is the answers as a JSON object,** one field per question. `ChatClient.entity(...)`
   maps that straight onto a record.
-- **What Jev cannot do is refused, not faked:**
-  - streaming is unsupported
-  - tools are never called
-  - probabilities and confidence stay in metadata, not in the text
+- **What Jev cannot do is refused, not faked.** It doesn't stream, never calls tools and
+  classifies text only. Probabilities and confidence stay in metadata, not in the reply text.
 
 Use it where a fast, deterministic label, flag or level is what the caller needs: routing,
 triage, moderation, intent detection, or any step in a workflow that only accepts a
@@ -51,44 +49,44 @@ Triage t = ChatClient.create(triage)
     .prompt()
     .user("Production is down after the 14:00 deploy; every customer gets HTTP 500.")
     .call()
-    .entity(Triage.class);
+    .entity(Triage.class, spec -> spec.useProviderStructuredOutput());
 // e.g. Triage[team=infra, urgent=0.97, severity=1.8]
 ```
 
 Name each question after the record component its answer should land in.
 
-### Structured output
+## Structured output
 
-Prefer `ChatClient`'s **native** structured output:
+`spec.useProviderStructuredOutput()` selects Spring AI's **native** structured output: the
+record's JSON schema reaches `JevChatModel` in the options. Prefer it:
 
-```java
-Triage t = ChatClient.create(triage)
-    .prompt()
-    .user(ticket)
-    .call()
-    .entity(Triage.class, spec -> spec.useProviderStructuredOutput());
-```
+- **The state is exactly what the caller wrote.** Nothing is appended to the user message,
+  so nothing has to be removed.
+- **The record is checked against the questions before any call.** A field with no question
+  of the same name fails with an `IllegalArgumentException` that names the field and lists
+  the questions. So does a field whose type cannot hold the answer. A choice's label needs a
+  `String`, or an enum that contains every option. A noul's or score's value needs a
+  floating-point type (`double`, `Double`, `float`); `int` and `boolean` are rejected. Shared
+  enums (a `$ref` in the schema) and nullable fields are followed. A field whose schema
+  declares no type is accepted without a check.
+- **The reply holds exactly the record's fields.** Questions the record does not ask for are
+  still answered, and are available in the metadata, but are left out of the reply. That
+  keeps `spec.validateSchema()` working, since the schema forbids additional properties.
+- **The target must be an object.** A record or class is fine; a `List<...>` target is
+  rejected before any call.
 
-The record's JSON schema then reaches `JevChatModel` in the options, instead of as
-instructions appended to the user message. That has two effects:
-
-- **The state is exactly what the caller wrote.** Nothing has to be stripped.
-- **The record is checked against the questions before any call.** A field fails with a
-  message naming it when:
-  - no question answers it
-  - its type can't hold the answer: a choice's label needs a `String` or an enum that
-    contains every option; a noul's or score's value needs a `double`
-  Questions the record doesn't ask for are fine.
-
-With plain `.entity(Triage.class)`, Spring AI uses **prompt-based** structured output: it
-appends format instructions to the user message. `JevChatModel` recognises them by their
-opening sentence ("Your response should be in JSON format.") and removes them from the
-state. That works with `BeanOutputConverter`, Spring AI's default converter, but it depends
-on its exact wording and skips the schema check.
+With plain `.entity(Triage.class)`, Spring AI uses **prompt-based** structured output instead.
+It appends format instructions to the last user message. The default state converter removes
+them: a suffix that starts with "Your response should be in JSON format." on its own line
+and contains "RFC8259 compliant JSON response". That covers `BeanOutputConverter` and
+`MapOutputConverter`. It relies on Spring AI's current wording, there is no schema check, and
+the reply contains every answer. `ListOutputConverter` is rejected: it asks for
+comma-separated values, which a JSON object cannot satisfy.
 
 ## What comes back
 
-The reply is a JSON object with one field per question, in declaration order:
+The reply is a JSON object, one field per question, in declaration order. With native
+structured output it holds only the record's fields.
 
 | Question | Field value | Example |
 |---|---|---|
@@ -101,8 +99,9 @@ String json = ChatClient.create(triage).prompt().user(ticket).call().content();
 // {"team":"infra","urgent":0.97,"severity":1.8}
 ```
 
-The full `SystemOneResponse`, with every probability and confidence, is in the generation
-metadata. The response metadata carries the model, the token usage and the request id:
+The full `SystemOneResponse`, with every answer, probability and confidence, is in the
+generation metadata. The response metadata carries the model, the token usage and the
+request id:
 
 ```java
 ChatResponse response = ChatClient.create(triage).prompt().user(ticket).call().chatResponse();
@@ -110,8 +109,8 @@ ChatResponse response = ChatClient.create(triage).prompt().user(ticket).call().c
 SystemOneResponse jev = response.getResult().getMetadata().get(JevChatModel.RESPONSE_METADATA_KEY);
 double infra = jev.choice("team").probabilityOf("infra");
 
-response.getMetadata().getModel();                    // jev-1.13.0
-response.getMetadata().getUsage().getPromptTokens();  // 210
+response.getMetadata().getModel();                    // e.g. jev-1.13.0
+response.getMetadata().getUsage().getPromptTokens();  // e.g. 210
 ```
 
 ## What Jev sees
@@ -125,11 +124,15 @@ By default, the prompt becomes this state:
 }
 ```
 
-- `system` (`JevChatModel.SYSTEM_FIELD`) is left out when there is no system message.
-- `messages` (`JevChatModel.MESSAGES_FIELD`) holds the user and assistant turns in order.
-- With prompt-based structured output, the JSON format instructions `ChatClient.entity(...)`
-  appends to the user message are removed. They tell a generator how to reply, and Jev's
-  reply shape is fixed. See [structured output](#structured-output).
+- **`system`** (`JevChatModel.SYSTEM_FIELD`) holds every system message, joined with a blank
+  line. It is left out when there are none.
+- **`messages`** (`JevChatModel.MESSAGES_FIELD`) holds the user and assistant turns, in order.
+- **Format instructions:** on the prompt-based path, the instructions appended to the
+  **last** user message are removed, as described
+  [above](#structured-output). Earlier messages, and a message that only quotes the
+  instruction text, are left untouched.
+- **Media:** a message carrying media is rejected with `IllegalArgumentException`. Jev
+  classifies text.
 
 Write question instructions in terms of that state, for example "the user's ticket". To
 judge a different shape, supply your own converter:
@@ -137,20 +140,25 @@ judge a different shape, supply your own converter:
 ```java
 JevChatModel.builder(typeSafeClient)
     .questions(questions)
-    .stateConverter(prompt -> JsonContent.of(Map.of("ticket", prompt.getUserMessage().getText())))
+    .stateConverter(prompt -> JsonContent.of(Map.of("ticket",
+        JevChatModel.withoutFormatInstructions(prompt.getUserMessage().getText()))))
     .build();
 ```
 
+A custom converter receives the prompt as sent. On the prompt-based path that includes the
+appended format instructions, so remove them with `JevChatModel.withoutFormatInstructions`,
+as above, or use native structured output.
+
 ## Builder Configuration
 
-| Builder method | Type | Default | Description |
-|---|---|---|---|
-| `question(String, Question)` | — | — (**at least one**) | A question every call answers. The name is the reply's field. |
-| `questions(Map<String, Question>)` | — | — | Several questions at once, in map order. |
-| `stateConverter(Function<Prompt, JsonContent>)` | — | `JevChatModel::defaultState` | How a prompt becomes the state. |
-| `answerRenderer(Function<SystemOneResponse, String>)` | — | `JevChatModel::answersAsJson` | How the answers become the reply's text. |
-| `observationRegistry(ObservationRegistry)` | `ObservationRegistry` | `NOOP` | Observe each call; see [observability](#observability). |
-| `observationConvention(ChatModelObservationConvention)` | — | `DefaultChatModelObservationConvention` | Replace the observation's name and key values. |
+| Builder method | Default | Description |
+|---|---|---|
+| `question(String, Question)` | — (**at least one**) | A question every call answers. The name is the reply's field. |
+| `questions(Map<String, ? extends Question>)` | — | Several questions at once, in map order. |
+| `stateConverter(Function<Prompt, JsonContent>)` | `JevChatModel::defaultState` | How a prompt becomes the state. |
+| `answerRenderer(Function<SystemOneResponse, String>)` | `JevChatModel::answersAsJson` | How the answers become the reply's text. A custom renderer owns the reply's shape, so the native schema check is skipped. |
+| `observationRegistry(ObservationRegistry)` | `ObservationRegistry.NOOP` | Observe each call; see [observability](#observability). |
+| `observationConvention(ChatModelObservationConvention)` | `DefaultChatModelObservationConvention` | Replace the observation's name and key values. |
 
 The model named in the prompt's `ChatOptions` is used when set; otherwise the client's
 default model.
@@ -162,6 +170,8 @@ default model.
 | `stream(...)` | errors with `UnsupportedOperationException`. Jev answers every question at once. |
 | Tools given to `ChatClient` | dropped. `getOptions()` are not tool-calling options, so `ChatClient` never starts its tool loop. |
 | A `Prompt` carrying tool callbacks directly | rejected with `IllegalArgumentException`. |
+| Media in a message | rejected with `IllegalArgumentException`. |
+| List output (`ListOutputConverter`) | rejected with `IllegalArgumentException`. |
 | Temperature, top-p, max tokens | ignored; Jev has no such settings. |
 
 Advisors still run. Memory or retrieval advisors only add text to the state, though; they
@@ -176,9 +186,14 @@ observation, contextually named `chat <model>`.
 |---|---|
 | `gen_ai.operation.name` | `chat` |
 | `gen_ai.system` | `typesafe` (`JevChatModel.PROVIDER`) |
-| `gen_ai.request.model` / `gen_ai.response.model` | e.g. `jev-latest` / `jev-1.13.0` |
+| `gen_ai.request.model` | the model sent, the client's default when the prompt names none |
+| `gen_ai.response.model` | the model that answered, e.g. `jev-1.13.0` |
 | `gen_ai.response.id` | the request id |
-| `gen_ai.usage.input_tokens` / `output_tokens` | the token counts Jev reports |
+| `gen_ai.response.finish_reasons` | always `["STOP"]` |
+| `gen_ai.usage.input_tokens` / `output_tokens` / `total_tokens` | the token counts Jev reports |
+
+Request settings such as temperature are recorded when the caller sets them, even though Jev
+ignores them.
 
 With Spring AI's `ChatModelMeterObservationHandler` registered, token usage is also recorded
 as `gen_ai.client.token.usage`, tagged `gen_ai.token.type` `input`, `output` or `total`. The
@@ -194,24 +209,28 @@ JevChatModel.builder(typeSafeClient)
 
 ## With Spring Boot
 
-Expose a `ChatClient` built on the model, **not** the model itself:
+Expose a `ChatClient` built on the model, **not** the model itself. Pass the
+`ObservationRegistry` to both, so the `ChatClient` and advisor observations are recorded
+alongside the model's:
 
 ```java
 @Bean
 ChatClient triageClient(TypeSafeClient typeSafeClient, ObservationRegistry observationRegistry) {
-    return ChatClient.create(JevChatModel.builder(typeSafeClient)
+    JevChatModel triage = JevChatModel.builder(typeSafeClient)
         .questions(TRIAGE_QUESTIONS)
         .observationRegistry(observationRegistry)
-        .build());
+        .build();
+    return ChatClient.create(triage, observationRegistry);
 }
 ```
 
 !!! warning "Do not declare a `JevChatModel` bean"
     A `JevChatModel` is a `ChatModel`. Declared as a bean next to the application's real
-    model, for example Anthropic's, it makes two `ChatModel` beans. Spring AI's
-    auto-configured `ChatClient.Builder` injects a single `ChatModel`, so it then fails to
-    start, or picks the wrong model if one is `@Primary`. Build the model inside the method
-    that creates its `ChatClient`, as above, and inject that client by name.
+    model, for example Anthropic's, it makes two `ChatModel` beans. Then any injection of
+    Spring AI's auto-configured `ChatClient.Builder`, or of a bare `ChatModel`, fails with
+    `NoUniqueBeanDefinitionException`. Marking one of them `@Primary` doesn't help: every
+    other `ChatClient` would silently use that model. Build the model inside the method that
+    creates its `ChatClient`, as above, and inject that client by name.
 
 The `TypeSafeClient` comes from the
 [Spring Boot starter](../client/SpringBootStarter.md), already configured with the API key,
