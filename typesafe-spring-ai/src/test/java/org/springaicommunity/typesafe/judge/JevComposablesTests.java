@@ -175,8 +175,7 @@ class JevComposablesTests {
 		// state rather than being dropped on the floor.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
-			.andExpect(jsonPath("$.state." + JevEvaluator.CONTEXT_FIELD)
-				.value(org.hamcrest.Matchers.containsString("Paris is in France")))
+			.andExpect(jsonPath("$.state." + JevEvaluator.CONTEXT_FIELD + "[0]").value("Paris is in France."))
 			.andRespond(MockTypeSafeServer.jsonResponse("""
 					{"model":"jev-1.13.0","answers":{
 					  "is_plausible":{"type":"noul","noul":0.99},
@@ -185,6 +184,26 @@ class JevComposablesTests {
 
 		EvaluationResponse result = new JevEvaluator(twoNoulJudge()).evaluate(new EvaluationRequest("Where is Paris?",
 				java.util.List.of(new Document("Paris is in France.")), "In France."));
+
+		assertThat(result.isPass()).isTrue();
+		assertThat(result.getScore()).isEqualTo(1.0f);
+	}
+
+	@Test
+	void leavesCriteriaThatDidNotApplyOutOfThePassRate() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.jsonResponse("""
+					{"model":"jev-1.13.0","answers":{"is_relevant":{"type":"noul","noul":0.99}},"usage":{}}"""));
+
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.criterion(JevCriterion.noul("is_grounded", Noul.of("Is `assistant_answer` supported by `supporting_context`?"), 0.7d)
+				.appliesWhen(input -> !input.context().isEmpty()))
+			.noul("is_relevant", Noul.of("Does `assistant_answer` address `user_question`?"), 0.7d)
+			.build();
+
+		EvaluationResponse result = new JevEvaluator(judge)
+			.evaluate(new EvaluationRequest("Where is Paris?", java.util.List.of(), "In France."));
 
 		assertThat(result.isPass()).isTrue();
 		assertThat(result.getScore()).isEqualTo(1.0f);

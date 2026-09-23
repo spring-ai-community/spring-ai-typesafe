@@ -18,6 +18,8 @@ package org.springaicommunity.typesafe.judge;
 
 
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springaicommunity.typesafe.TypeSafeClient;
@@ -26,6 +28,9 @@ import org.springaicommunity.typesafe.TypeSafeModels;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
+
+import org.springframework.ai.document.Document;
+import org.springframework.ai.evaluation.EvaluationRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -62,6 +67,12 @@ class JevJudgeIT {
 		.instructions("Are all the numeric values in `assistant_answer` physically plausible for their units?")
 		.whenTrue("Every value is within a range that can actually occur")
 		.whenFalse("At least one value is impossible, such as a temperature below absolute zero")
+		.build();
+
+	private static final Noul GROUNDED_IN_TOOLS = Noul.builder()
+		.instructions("Is every value in `assistant_answer` supported by a result in `tool_calls`?")
+		.whenTrue("Every value appears in a tool result")
+		.whenFalse("States a value no tool returned")
 		.build();
 
 	private final TypeSafeClient client = TypeSafeClient.builder()
@@ -108,6 +119,64 @@ class JevJudgeIT {
 	}
 
 	@Test
+	void judgesGroundednessAgainstTheToolCallsField() {
+		// The value a tool returned appears nowhere in the question, so grounding has to be
+		// judged against `tool_calls`. Same answer, different tool result, opposite verdict.
+		JevJudge grounded = JevJudge.builder(this.client).noul("is_grounded", GROUNDED_IN_TOOLS, 0.7d).build();
+
+		JevVerdict supported = grounded.judge(JevJudgeInput.builder()
+			.question(QUESTION)
+			.answer("It is 15 degrees Celsius in Paris.")
+			.toolCall(new JevJudgeInput.ToolCall("currentWeather", "{\"city\":\"Paris\"}", "15 degrees Celsius"))
+			.build());
+		JevVerdict unsupported = grounded.judge(JevJudgeInput.builder()
+			.question(QUESTION)
+			.answer("It is 28 degrees Celsius in Paris.")
+			.toolCall(new JevJudgeInput.ToolCall("currentWeather", "{\"city\":\"Paris\"}", "15 degrees Celsius"))
+			.build());
+
+		assertThat(supported.passed()).isTrue();
+		assertThat(unsupported.passed()).isFalse();
+		assertThat(unsupported.feedback()).contains("States a value no tool returned");
+	}
+
+	@Test
+	void judgesGroundednessAgainstEachRetrievedDocument() {
+		// JevEvaluator sends supporting_context as one entry per document; the supporting
+		// fact sits in the second one.
+		JevEvaluator evaluator = new JevEvaluator(JevJudge.builder(this.client)
+			.noul("is_grounded", Noul.builder()
+				.instructions("Is every claim in `assistant_answer` supported by `supporting_context`?")
+				.whenFalse("Introduces facts the context does not support")
+				.build(), 0.7d)
+			.build());
+		List<Document> documents = List.of(new Document("The Louvre is the most visited museum in the world."),
+				new Document("The Eiffel Tower is 330 metres tall."));
+
+		assertThat(evaluator.evaluate(new EvaluationRequest("How tall is the Eiffel Tower?", documents,
+				"The Eiffel Tower is 330 metres tall.")).isPass()).isTrue();
+		assertThat(evaluator.evaluate(new EvaluationRequest("How tall is the Eiffel Tower?", documents,
+				"The Eiffel Tower is 512 metres tall and was built in 1920.")).isPass()).isFalse();
+	}
+
+	@Test
+	void reportsACodeCheckInTheSameVerdictAsARealAnswer() {
+		JevJudge judge = JevJudge.builder(this.client)
+			.check("used_weather_tool", input -> !input.toolCalls().isEmpty(), "answered without calling a tool")
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.build();
+
+		JevVerdict verdict = judge.judge(JevJudgeInput.builder()
+			.question(QUESTION)
+			.answer("It is 15 degrees Celsius in Paris.")
+			.build());
+
+		assertThat(verdict.passed()).isFalse();
+		assertThat(verdict.summary()).isEqualTo("passed=false [used_weather_tool=FAILED, is_plausible=PASSED]");
+		assertThat(verdict.feedback()).isEqualTo("- used_weather_tool: answered without calling a tool");
+	}
+
+	@Test
 	void routesAChoiceToAnAcceptedOptionOnARealAnswer() {
 		JevJudge toneJudge = JevJudge.builder(this.client)
 			.choice("tone",
@@ -138,7 +207,6 @@ class JevJudgeIT {
 		return JevJudge.builder(this.client)
 			.score("helpfulness", HELPFULNESS, 2.0d)
 			.noul("is_plausible", PLAUSIBLE, 0.7d)
-			.minConfidence(0.5d)
 			.build();
 	}
 

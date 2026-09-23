@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springaicommunity.typesafe.RetryPolicy;
 import org.springaicommunity.typesafe.TypeSafeClient;
 import org.springaicommunity.typesafe.TypeSafeModels;
+import org.springaicommunity.typesafe.judge.JevJudgeInput;
 import org.springaicommunity.typesafe.judge.JevVerdict;
 
 import org.springframework.http.MediaType;
@@ -105,6 +106,20 @@ class WeatherJudgeTests {
 	}
 
 	@Test
+	void rejectsAnAnswerGivenWithoutCallingTheTool() {
+		this.server.expect(requestTo(SYSTEM_ONE_URL)).andRespond(respondWith(3.1, 0.99, 0.95, 0.90));
+
+		JevVerdict verdict = ModelJudgeDemoApplication.createWeatherJudge(this.typeSafeClient)
+			.judge("What is the weather in Paris?", "It is 15 degrees Celsius in Paris.");
+
+		assertThat(verdict.passed()).isFalse();
+		assertThat(verdict.failures()).singleElement()
+			.satisfies(finding -> assertThat(finding.name()).isEqualTo("used_weather_tool"));
+
+		this.server.verify();
+	}
+
+	@Test
 	void rejectsAnAnswerThatDoesNotAddressTheQuestion() {
 		this.server.expect(requestTo(SYSTEM_ONE_URL)).andRespond(respondWith(0.6, 0.99, 0.95, 0.82));
 
@@ -118,8 +133,25 @@ class WeatherJudgeTests {
 		this.server.verify();
 	}
 
+	/**
+	 * Judges an answer as the advisor presents it: with the weather tool call it
+	 * recorded.
+	 */
 	private JevVerdict judge(String question, String answer) {
-		return ModelJudgeDemoApplication.WeatherJudge.create(this.typeSafeClient).judge(question, answer);
+		return ModelJudgeDemoApplication.createWeatherJudge(this.typeSafeClient)
+			.judge(JevJudgeInput.builder()
+				.question(question)
+				.answer(answer)
+				.toolCall(new JevJudgeInput.ToolCall("weather", "{\"location\":\"Paris\"}", "15 degrees Celsius"))
+				.build());
+	}
+
+	/**
+	 * The judge gates on the probability behind a verdict, so the distribution must agree
+	 * with the score: all of it on the level the score rounds to.
+	 */
+	private static int nearestLevel(double score) {
+		return (int) Math.max(0, Math.min(3, Math.round(score)));
 	}
 
 	private org.springframework.test.web.client.ResponseCreator respondWith(double helpfulness, double plausible,
@@ -131,14 +163,14 @@ class WeatherJudgeTests {
 				    "helpfulness": {
 				      "type": "score", "score": %s,
 				      "legend": {"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
-				      "probabilities": {"0":0.1,"1":0.2,"2":0.3,"3":0.4},
+				      "probabilities": {"%d": 1.0},
 				      "confidence": %s
 				    },
 				    "is_plausible": { "type": "noul", "noul": %s },
 				    "is_grounded":  { "type": "noul", "noul": %s }
 				  },
 				  "usage": { "input_tokens": 210, "output_tokens": 32 }
-				}""".formatted(helpfulness, confidence, plausible, grounded);
+				}""".formatted(helpfulness, nearestLevel(helpfulness), confidence, plausible, grounded);
 		return MockRestResponseCreators.withSuccess(body, MediaType.APPLICATION_JSON);
 	}
 

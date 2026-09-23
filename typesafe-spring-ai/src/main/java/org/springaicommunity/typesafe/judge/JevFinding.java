@@ -16,21 +16,22 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
+import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.response.Answer;
 
 /**
  * What one {@link JevCriterion} concluded about a response.
  *
  * @param criterion the criterion that was checked
- * @param answer the JEV model's answer
+ * @param answer the Jev model's answer; {@code null} for a
+ * {@link JevCriterion.CodeCriterion}, which is answered in code, and for a criterion that
+ * was {@link Outcome#NOT_APPLICABLE}
  * @param outcome whether the criterion passed, failed or could not be decided
  * @param detail a sentence naming the defect, ready to be handed back to the model as
  * feedback; empty when the criterion passed
  * @author Christian Tzolov
  */
-public record JevFinding(JevCriterion criterion, Answer answer, Outcome outcome, String detail) {
+public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcome outcome, String detail) {
 
 	/**
 	 * @return the name of the criterion
@@ -47,7 +48,9 @@ public record JevFinding(JevCriterion criterion, Answer answer, Outcome outcome,
 	}
 
 	/**
-	 * The three ways a criterion can land.
+	 * The ways a criterion can land. Only {@link #FAILED} blocks the response; the
+	 * judge's {@code failOnInconclusive} and {@code failOnError} turn the undecided and
+	 * errored cases into {@code FAILED} when the caller wants them to block.
 	 */
 	public enum Outcome {
 
@@ -58,11 +61,26 @@ public record JevFinding(JevCriterion criterion, Answer answer, Outcome outcome,
 		FAILED,
 
 		/**
-		 * The model's distribution was too flat to act on. Confidence is a statistic over
-		 * the answer's own probability distribution, so a low value means the options or
-		 * levels were not well separated for this state, not that the answer was bad.
+		 * Too little of the answer's probability supported the verdict to act on it: the
+		 * question did not separate pass from fail for this state, which is not the same
+		 * as the answer being bad.
 		 */
-		INCONCLUSIVE
+		INCONCLUSIVE,
+
+		/**
+		 * The instrument failed: the service returned no answer for this criterion, or an
+		 * answer kind this SDK does not understand. Says nothing about the answer.
+		 */
+		ERROR,
+
+		/**
+		 * The criterion did not apply. Either it was not asked — its {@code appliesWhen}
+		 * predicate did not hold, or a failed code check skipped the call under
+		 * {@code failFast} — or it was asked in the same call but the criterion it depends
+		 * on ({@code whenChosen}, {@code whenPassed}) was not met, and its answer was set
+		 * aside.
+		 */
+		NOT_APPLICABLE
 
 	}
 

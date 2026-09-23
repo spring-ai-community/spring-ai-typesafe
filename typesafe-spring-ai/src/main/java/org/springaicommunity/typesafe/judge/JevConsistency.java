@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -42,17 +40,17 @@ import org.springframework.util.Assert;
  * Asks the same questions repeatedly and reports how much the answers move.
  *
  * <p>
- * A single number tells you where an answer sits; it does not tell you whether it would sit
- * there again. That matters when a value lands near a threshold, because there the
+ * A single number tells you where an answer sits; it does not tell you whether it would
+ * sit there again. That matters when a value lands near a threshold, because there the
  * difference between acting and not acting can be noise rather than judgement. Sampling a
  * question a few times and looking at the spread is how you find out which of your
  * thresholds are resting on solid ground.
  *
  * <p>
  * Each sample carries a fresh throwaway {@code uid} in its state, which is what makes the
- * draws independent rather than a repeat of one cached computation. The state is otherwise
- * untouched, and the questions are identical across samples — this measures the service's
- * own stability, not the effect of rewording.
+ * draws independent rather than a repeat of one cached computation. The state is
+ * otherwise untouched, and the questions are identical across samples — this measures the
+ * service's own stability, not the effect of rewording.
  *
  * <pre>{@code
  * JevConsistency.Report report = JevConsistency.sample(client, state, questions, 15);
@@ -92,8 +90,8 @@ public final class JevConsistency {
 		}
 
 		/**
-		 * @return the spread between the extremes, the quickest read on whether a threshold
-		 * sitting inside it would flip between runs
+		 * @return the spread between the extremes, the quickest read on whether a
+		 * threshold sitting inside it would flip between runs
 		 */
 		public double range() {
 			return this.max - this.min;
@@ -122,8 +120,7 @@ public final class JevConsistency {
 		public Report {
 			samples = samples == null ? List.of() : List.copyOf(samples);
 			failures = failures == null ? List.of() : List.copyOf(failures);
-			statistics = statistics == null ? Map.of()
-					: Collections.unmodifiableMap(new LinkedHashMap<>(statistics));
+			statistics = statistics == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(statistics));
 		}
 
 		/**
@@ -159,8 +156,8 @@ public final class JevConsistency {
 	 * @param samples how many times to ask
 	 * @return the report
 	 */
-	public static Report sample(TypeSafeClient client, Map<String, ?> state,
-			Map<String, ? extends Question> questions, int samples) {
+	public static Report sample(TypeSafeClient client, Map<String, ?> state, Map<String, ? extends Question> questions,
+			int samples) {
 		return sample(client, state, questions, samples, JevBatchOptions.defaults());
 	}
 
@@ -173,8 +170,8 @@ public final class JevConsistency {
 	 * @param options how widely to fan the samples out
 	 * @return the report
 	 */
-	public static Report sample(TypeSafeClient client, Map<String, ?> state,
-			Map<String, ? extends Question> questions, int samples, JevBatchOptions options) {
+	public static Report sample(TypeSafeClient client, Map<String, ?> state, Map<String, ? extends Question> questions,
+			int samples, JevBatchOptions options) {
 		Assert.notNull(client, "client must not be null");
 		Assert.notNull(state, "state must not be null");
 		Assert.notEmpty(questions, "questions must declare at least one question");

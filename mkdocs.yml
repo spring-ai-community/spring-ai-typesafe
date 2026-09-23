@@ -63,6 +63,7 @@ nav:
     - JevConsistency: patterns/JevConsistency.md
     - JevCompositeScore: patterns/JevCompositeScore.md
   - Demos: demos.md
+  - Changes: changes.md
 
 markdown_extensions:
   - admonition

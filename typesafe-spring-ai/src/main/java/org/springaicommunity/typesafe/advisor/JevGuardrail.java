@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.advisor;
 
-
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -36,18 +34,18 @@ import org.springframework.util.Assert;
  * A battery of hazard checks run against one piece of text.
  *
  * <p>
- * Every hazard is its own question with its own threshold, because "is this safe" is not one
- * judgement. A request for medical dosing and an attempt to talk the assistant out of its
- * instructions are different problems with different right answers, and a single safety
- * score has to average them into something that serves neither. All the questions ride in
- * one call, so asking about six hazards costs what asking about one would.
+ * Every hazard is its own question with its own threshold, because "is this safe" is not
+ * one judgement. A request for medical dosing and an attempt to talk the assistant out of
+ * its instructions are different problems with different right answers, and a single
+ * safety score has to average them into something that serves neither. All the questions
+ * ride in one call, so asking about six hazards costs what asking about one would.
  *
  * <p>
- * Two thresholds separate three postures. Above {@code actionThreshold} the hazard is taken
- * as real and its configured action applies. Between {@code reviewThreshold} and that, the
- * turn is flagged for a human rather than decided by a number. A separate severity rubric
- * can promote a review to a block when what is being discussed is serious enough that a
- * borderline probability is not good enough.
+ * Two thresholds separate three postures. Above {@code actionThreshold} the hazard is
+ * taken as real and its configured action applies. Between {@code reviewThreshold} and
+ * that, the turn is flagged for a human rather than decided by a number. A separate
+ * severity rubric can promote a review to a block when what is being discussed is serious
+ * enough that a borderline probability is not good enough.
  *
  * @author Christian Tzolov
  */
@@ -85,8 +83,8 @@ public final class JevGuardrail {
 	 * What to do about a turn.
 	 *
 	 * <p>
-	 * Declared in increasing precedence: when several hazards fire, the most serious outcome
-	 * is the one that applies.
+	 * Declared in increasing precedence: when several hazards fire, the most serious
+	 * outcome is the one that applies.
 	 */
 	public enum Outcome {
 
@@ -100,8 +98,8 @@ public final class JevGuardrail {
 		BLOCK,
 
 		/**
-		 * Refuse, and route to help rather than to an error. Reserved for hazards where the
-		 * person needs something other than the assistant.
+		 * Refuse, and route to help rather than to an error. Reserved for hazards where
+		 * the person needs something other than the assistant.
 		 */
 		SUPPORT
 
@@ -206,7 +204,8 @@ public final class JevGuardrail {
 		double severityValue = -1.0d;
 		if (response.answers().containsKey(SEVERITY_QUESTION)) {
 			severityValue = response.scoreValue(SEVERITY_QUESTION);
-			// A borderline probability about something serious is not a borderline problem.
+			// A borderline probability about something serious is not a borderline
+			// problem.
 			if (outcome == Outcome.REVIEW && severityValue >= this.severityBlockThreshold) {
 				outcome = Outcome.BLOCK;
 			}
@@ -234,9 +233,10 @@ public final class JevGuardrail {
 	}
 
 	/**
-	 * A battery for user messages, asking whether the person is trying to obtain something
-	 * unsafe. Covers jailbreak attempts, requests for physical harm, requests for illegal
-	 * help, and self-harm signals, the last routed to {@link Outcome#SUPPORT}.
+	 * A battery for user messages, asking whether the person is trying to obtain
+	 * something unsafe. Covers jailbreak attempts, requests for physical harm, requests
+	 * for illegal help, and self-harm signals, the last routed to
+	 * {@link Outcome#SUPPORT}.
 	 * @return the battery
 	 */
 	public static JevGuardrail defaultInputBattery() {
@@ -253,8 +253,8 @@ public final class JevGuardrail {
 	}
 
 	/**
-	 * A battery for assistant replies, asking whether the model complied with something it
-	 * should have refused. The hazards mirror the input battery, which is what makes a
+	 * A battery for assistant replies, asking whether the model complied with something
+	 * it should have refused. The hazards mirror the input battery, which is what makes a
 	 * jailbreak that succeeded visible even when the request itself read as innocuous.
 	 * @return the battery
 	 */
@@ -319,9 +319,10 @@ public final class JevGuardrail {
 		 * @return this builder
 		 */
 		public Builder hazard(String hazardName, String question, String whenTrue, Outcome action) {
-			return hazard(hazardName, new Hazard(
-					Noul.builder().instructions(question).whenTrue(whenTrue).whenFalse("Not the case").build(),
-					action));
+			return hazard(hazardName,
+					new Hazard(
+							Noul.builder().instructions(question).whenTrue(whenTrue).whenFalse("Not the case").build(),
+							action));
 		}
 
 		/**

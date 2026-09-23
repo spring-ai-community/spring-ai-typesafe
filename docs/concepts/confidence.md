@@ -63,6 +63,8 @@ classDiagram
         PASSED
         FAILED
         INCONCLUSIVE
+        ERROR
+        NOT_APPLICABLE
     }
 
     class JevJudge {
@@ -72,8 +74,8 @@ classDiagram
 
     JevConfidenceGate ..> ChoiceAnswer : decide(answer)
     JevConfidenceGate --> Decision
-    JevJudge ..> ChoiceAnswer : reads confidence
-    JevJudge ..> ScoreAnswer : reads confidence
+    JevJudge ..> ChoiceAnswer : reads probabilities
+    JevJudge ..> ScoreAnswer : reads probabilities
     JevJudge --> Outcome
 
     note for NoulAnswer "no confidence field:<br/>the value is the certainty"
@@ -132,16 +134,26 @@ the per-action requirement is about what the action costs when it is wrong.
 
 ## Confidence in the judge
 
-[`JevJudge`](../judge/JevJudge.md) treats a low-confidence criterion as **undecided, not
+[`JevJudge`](../judge/JevJudge.md) makes a pass/fail decision, so it asks a narrower
+question than the answer's `confidence` does. Not *how concentrated is the distribution?* but
+*how much of it supports this verdict?*: the probability on the verdict's side of the
+threshold. The two differ when the mass is split between levels that all pass, or all fail.
+`{2: 0.52, 3: 0.41}` against a `minimum` of 2 has a `confidence` near 0.5, yet 93% of it
+supports the pass.
+
+A criterion whose verdict is not supported by enough probability is **undecided, not
 failed**. It is reported as `INCONCLUSIVE` and does not block:
 
 ```java
 JevJudge judge = JevJudge.builder(typeSafeClient)
     .score("helpfulness", rubric, 2.0d)
-    .minConfidence(0.5d)          // below this, a criterion is INCONCLUSIVE
+    .minConfidence(0.6d)          // the default: a clear majority must support the verdict
     .failOnInconclusive(false)    // the default: undecided does not block
     .build();
 ```
+
+`JevConfidenceGate` still reads `confidence` itself, because routing an action is a different
+decision: there, how clearly *one* option won is exactly the question.
 
 Turn `failOnInconclusive(true)` on where shipping an unverified answer is worse than
 failing. Leaving it off is right when an occasional unverifiable answer is acceptable and

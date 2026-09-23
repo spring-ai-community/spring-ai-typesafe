@@ -35,7 +35,7 @@ if (!result.isPass()) {
 |---|---|
 | `getUserText()` | `user_question` |
 | `getResponseContent()` | `assistant_answer` |
-| `getDataList()` | `supporting_context` (only when non-empty) |
+| `getDataList()` | `supporting_context`, one entry per document (only when non-empty) |
 
 | `EvaluationResponse` | From |
 |---|---|
@@ -63,8 +63,8 @@ Map<String, String> findings =
 ## Supporting documents
 
 `getDataList()` carries the retrieved `Document`s, which is the evidence a groundedness
-criterion needs. They reach the state as `supporting_context`, so write such a criterion
-against that field:
+criterion needs. Their texts reach the state as the `supporting_context` array, one entry per
+document, so write such a criterion against that field:
 
 ```java
 JevJudge grounded = JevJudge.builder(typeSafeClient)
@@ -75,8 +75,9 @@ JevJudge grounded = JevJudge.builder(typeSafeClient)
     .build();
 ```
 
-This is also how a groundedness check gets real evidence in a RAG setting, which the
-[self-refine advisor](JevSelfRefineAdvisor.md) cannot do when tool execution is internal.
+This is also how a groundedness check gets real evidence in a RAG setting. The
+[self-refine advisor](JevSelfRefineAdvisor.md) sees the retrieved context only at its default
+order, inside the retrieval advisor.
 
 ## See Also
 

@@ -184,10 +184,35 @@ JevGuardrailAdvisor advisor = JevGuardrailAdvisor.builder(typeSafeClient)
 | `refusal(String)` | `String` | `"I can't help with that."` | Returned on a `BLOCK`. |
 | `supportMessage(String)` | `String` | a signposting message | Returned on a `SUPPORT`. |
 | `blockOnReview(boolean)` | `boolean` | `false` | Treat a flagged turn as blocked. |
-| `order(int)` | `int` | `LOWEST_PRECEDENCE - 1000` | Runs later than the self-refine advisor, so it sees the final answer. |
+| `order(int)` | `int` | `LOWEST_PRECEDENCE - 1000` | Nearest the model: screens every model call. See [where it sits](#where-it-sits). |
 
 At least one battery must be set — a guardrail that screens neither direction does nothing,
 and the builder says so.
+
+## Where it sits
+
+A higher order value runs *later* on the way in, nearer the model, and so *inside* every
+advisor with a lower value. The default, `LOWEST_PRECEDENCE - 1000`, places the guardrail
+inside both the [self-refine advisor](../judge/JevSelfRefineAdvisor.md)'s retry loop (at
+its default `LOWEST_PRECEDENCE - 2000`, or at `BEFORE_TOOLS_ORDER`) and Spring AI's tool
+loop (`HIGHEST_PRECEDENCE + 300`). It therefore runs on **every model call** of a turn, not
+once per turn:
+
+- The **output battery** screens each reply the model produces: every retry attempt, and
+  any text alongside a tool call. A reply that is only a tool call has no text and is
+  skipped. Every answer the self-refine advisor could return has been screened, and an
+  unsafe draft is replaced by the refusal before it is judged.
+- The **input battery** screens the user message on each of those calls too, so a turn with
+  retries or tool calls pays for it more than once. On a retry, the message it screens
+  carries the judge's feedback.
+
+To screen once per turn instead, order the guardrail *outside* the self-refine advisor, for
+example `.order(BaseAdvisor.HIGHEST_PRECEDENCE + 150)`. It then sees the original request and
+the answer the turn finally settled on, and a refusal it returns cannot be retried away. The
+cost: an unsafe draft reaches the judge and costs a retry before it is caught. The default
+has a cost of its own: a blocked input returns the refusal, which the judge then scores and
+typically fails, so a blocked request can cost up to `maxRepeatAttempts` further rounds of
+screening and judging.
 
 ## Custom batteries
 
