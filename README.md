@@ -102,8 +102,10 @@ never turns an ordinary build into a billed one.
 
 > [!WARNING]
 > While working on the SDK, do not export `TYPESAFE_BASE_URL` or `TYPESAFE_DEFAULT_MODEL`.
-> `TypeSafeClient.builder()` falls back to both, and any throwaway `main` you write will
-> pick them up.
+> `TypeSafeClient.builder()` falls back to both, and any throwaway `main` you write, and
+> the live ITs, will pick them up. Export `TYPESAFE_BASE_URL` only to run the ITs against a
+> compatible server on purpose, such as a local
+> [Laya](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/client/Laya/).
 
 Run the demos from
 [Demos](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/demos/).

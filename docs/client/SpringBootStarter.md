@@ -78,7 +78,8 @@ properties.
 
 !!! warning "Do not export TYPESAFE_BASE_URL while developing"
     The plain-Java builder falls back to it, so an exported value silently redirects any
-    throwaway `main` you write, and any test that does not pin the base URL itself.
+    throwaway `main` you write, and the live ITs. That is also how to point them at a
+    compatible server on purpose; see [Using Laya](Laya.md).
 
 ## Endpoints bean
 
