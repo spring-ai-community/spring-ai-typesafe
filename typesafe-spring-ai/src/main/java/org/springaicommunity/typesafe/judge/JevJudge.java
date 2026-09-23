@@ -17,10 +17,12 @@
 package org.springaicommunity.typesafe.judge;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -198,6 +200,9 @@ public class JevJudge {
 
 		// Declaration order: a dependency is always declared before its dependents, so
 		// its finding is final by the time a dependent reads it.
+		// Criteria whose answer did not settle the question, recorded before failOnInconclusive
+		// or failOnError turn them into FAILED: a dependent must not follow an undecided choice.
+		Set<String> undecided = new HashSet<>();
 		Map<String, JevFinding> byName = new LinkedHashMap<>();
 		for (JevCriterion criterion : this.criteria) {
 			JevFinding finding = decided.get(criterion.name());
@@ -205,11 +210,12 @@ public class JevJudge {
 				// Read through the map rather than answer(), which throws. A partial
 				// response should degrade that one criterion, not abort the caller's
 				// whole chat call.
-				finding = evaluate((QuestionCriterion) criterion, response.answers().get(criterion.name()));
+				finding = evaluate((QuestionCriterion) criterion, response.answers().get(criterion.name()), undecided);
 			}
 			if (criterion instanceof QuestionCriterion question && question.dependsOn() != null
 					&& finding.outcome() != JevFinding.Outcome.NOT_APPLICABLE) {
-				String unmet = unmetDependency(question.dependsOn(), byName.get(question.dependsOn().criterion()));
+				String unmet = unmetDependency(question.dependsOn(), byName.get(question.dependsOn().criterion()),
+						undecided.contains(question.dependsOn().criterion()));
 				if (unmet != null) {
 					finding = notApplicable(question, "does not apply, " + unmet);
 				}
@@ -227,15 +233,16 @@ public class JevJudge {
 	/**
 	 * @return why the dependency is not met, or {@code null} when it is
 	 */
-	private static @Nullable String unmetDependency(JevCriterion.Dependency dependency, JevFinding target) {
+	private static @Nullable String unmetDependency(JevCriterion.Dependency dependency, JevFinding target,
+			boolean targetUndecided) {
 		if (dependency.chosen().isEmpty()) {
 			return target.outcome() == JevFinding.Outcome.PASSED ? null
 					: format("%s was %s", dependency.criterion(), target.outcome());
 		}
 		// A choice that was not decided — inconclusive, errored, not asked — selected
 		// nothing a dependent could rely on.
-		boolean decided = target.outcome() == JevFinding.Outcome.PASSED
-				|| target.outcome() == JevFinding.Outcome.FAILED;
+		boolean decided = !targetUndecided && (target.outcome() == JevFinding.Outcome.PASSED
+				|| target.outcome() == JevFinding.Outcome.FAILED);
 		if (decided && target.answer() instanceof ChoiceAnswer choice && dependency.chosen().contains(choice.value())) {
 			return null;
 		}
@@ -278,8 +285,9 @@ public class JevJudge {
 				format("%s: %s", criterion.name(), criterion.defect()));
 	}
 
-	private JevFinding evaluate(QuestionCriterion criterion, @Nullable Answer answer) {
+	private JevFinding evaluate(QuestionCriterion criterion, @Nullable Answer answer, Set<String> undecided) {
 		if (answer == null) {
+			undecided.add(criterion.name());
 			return error(criterion, new UnknownAnswer(null, Map.of()),
 					format("%s: the service returned no answer for this criterion", criterion.name()));
 		}
@@ -287,11 +295,12 @@ public class JevJudge {
 			return evaluateNoul(criterion, noul);
 		}
 		if (answer instanceof ScoreAnswer score) {
-			return evaluateScore(criterion, score);
+			return evaluateScore(criterion, score, undecided);
 		}
 		if (answer instanceof ChoiceAnswer choice) {
-			return evaluateChoice(criterion, choice);
+			return evaluateChoice(criterion, choice, undecided);
 		}
+		undecided.add(criterion.name());
 		return error(criterion, answer,
 				format("%s: the model returned an answer kind this SDK does not understand", criterion.name()));
 	}
@@ -317,11 +326,12 @@ public class JevJudge {
 						criterion.minimum()));
 	}
 
-	private JevFinding evaluateScore(QuestionCriterion criterion, ScoreAnswer answer) {
-		boolean passes = answer.value() >= criterion.minimum();
+	private JevFinding evaluateScore(QuestionCriterion criterion, ScoreAnswer answer, Set<String> undecided) {
+		boolean passes = scorePasses(criterion, answer);
 		double support = scoreSupport(criterion, answer, passes);
 		JevFinding.Outcome inconclusive = checkConfidence(support);
 		if (inconclusive != null) {
+			undecided.add(criterion.name());
 			return new JevFinding(criterion, answer, inconclusive, format(
 					"%s: the rubric did not settle whether this reaches %.2f (%.2f of the probability supports the verdict, needs at least %.2f)",
 					criterion.name(), criterion.minimum(), support, this.minConfidence));
@@ -333,7 +343,11 @@ public class JevJudge {
 		// Describe the level the score itself lands on, not the most probable level: the
 		// two can disagree on a spread distribution, and quoting a label that contradicts
 		// the number would be worse than useless as feedback.
-		String reached = describeLevel(criterion, answer, roundToLevel(criterion, answer.value()));
+		// Clamped below the first passing level: a failing 1.8 rounds to 2, and telling the
+		// model it reached the level it is asked to reach would contradict itself.
+		int reachedLevel = Math.min(roundToLevel(criterion, answer.value()),
+				Math.max(0, (int) Math.ceil(criterion.minimum()) - 1));
+		String reached = describeLevel(criterion, answer, reachedLevel);
 		String required = describeLevel(criterion, answer, (int) Math.ceil(criterion.minimum()));
 		String detail = format("%s: rated \"%s\" (%.2f), needs to reach %.2f", criterion.name(), reached,
 				answer.value(), criterion.minimum());
@@ -343,11 +357,12 @@ public class JevJudge {
 		return new JevFinding(criterion, answer, JevFinding.Outcome.FAILED, detail);
 	}
 
-	private JevFinding evaluateChoice(QuestionCriterion criterion, ChoiceAnswer answer) {
-		boolean passes = criterion.acceptedOptions().contains(answer.value());
+	private JevFinding evaluateChoice(QuestionCriterion criterion, ChoiceAnswer answer, Set<String> undecided) {
+		boolean passes = choicePasses(criterion, answer);
 		double support = choiceSupport(criterion, answer, passes);
 		JevFinding.Outcome inconclusive = checkConfidence(support);
 		if (inconclusive != null) {
+			undecided.add(criterion.name());
 			return new JevFinding(criterion, answer, inconclusive, format(
 					"%s: the options did not settle whether this is one of %s (%.2f of the probability supports the verdict, needs at least %.2f)",
 					criterion.name(), criterion.acceptedOptions(), support, this.minConfidence));
@@ -356,8 +371,38 @@ public class JevJudge {
 			return new JevFinding(criterion, answer, JevFinding.Outcome.PASSED, "");
 		}
 		return new JevFinding(criterion, answer, JevFinding.Outcome.FAILED, format(
-				"%s: classified as \"%s\" (%.2f of the probability on unacceptable options), acceptable values are %s",
-				criterion.name(), answer.value(), support, criterion.acceptedOptions()));
+				"%s: %.2f of the probability is on options outside %s (most likely \"%s\")",
+				criterion.name(), support, criterion.acceptedOptions(), answer.value()));
+	}
+
+	/**
+	 * Whether a score passes: when at least half of its probability sits on levels at or
+	 * above the first passing level. Deciding from the same split that
+	 * {@link #scoreSupport} measures keeps the verdict and its support in agreement; the
+	 * expected value alone can land on one side while most of the probability sits on the
+	 * other. Without probabilities, the value decides.
+	 */
+	static boolean scorePasses(QuestionCriterion criterion, ScoreAnswer answer) {
+		if (answer.probabilities().isEmpty() || total(answer.probabilities().values()) <= 0.0d) {
+			return answer.value() >= criterion.minimum();
+		}
+		return scoreSupport(criterion, answer, true) >= 0.5d;
+	}
+
+	/**
+	 * Whether a choice passes: when at least half of its probability sits on the accepted
+	 * options, even if the single most probable label is not one of them. Without
+	 * probabilities, the selected label decides.
+	 */
+	static boolean choicePasses(QuestionCriterion criterion, ChoiceAnswer answer) {
+		if (answer.probabilities().isEmpty() || total(answer.probabilities().values()) <= 0.0d) {
+			return criterion.acceptedOptions().contains(answer.value());
+		}
+		return choiceSupport(criterion, answer, true) >= 0.5d;
+	}
+
+	private static double total(java.util.Collection<Double> probabilities) {
+		return probabilities.stream().mapToDouble(Double::doubleValue).sum();
 	}
 
 	/**

@@ -213,9 +213,8 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 
 		private boolean blockOnReview;
 
-		// Later than the self-refine advisor's default, so a guardrail sees the answer
-		// that
-		// self-refinement settled on rather than an intermediate draft.
+		// Nearer the model than the self-refine advisor's default, so every attempt is
+		// screened before it is judged; see the class javadoc for screening once per turn.
 		private int advisorOrder = BaseAdvisor.LOWEST_PRECEDENCE - 1000;
 
 		private Builder(TypeSafeClient typeSafeClient) {

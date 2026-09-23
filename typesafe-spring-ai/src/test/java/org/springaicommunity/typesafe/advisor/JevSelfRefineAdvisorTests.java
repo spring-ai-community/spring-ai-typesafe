@@ -385,9 +385,9 @@ class JevSelfRefineAdvisorTests {
 	}
 
 	@Test
-	void recordsTheToolCallsItsAttemptMadeAtTheDefaultOrder() {
-		// Ordered before the tool loop, the tool traffic never reaches this advisor's
-		// prompt; it is recorded from the wrapped callbacks instead.
+	void readsTheToolCallsFromThePromptAtTheDefaultOrder() {
+		// At the default order the advisor runs inside the tool loop, so the calls and
+		// their results arrive in the prompt it receives.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
 			.andExpect(jsonPath("$.state.tool_calls[0].name").value("weather"))
@@ -412,9 +412,36 @@ class JevSelfRefineAdvisorTests {
 	}
 
 	@Test
+	void recordsTheToolCallsBeforeTheToolLoop() {
+		// Before the tool loop the tool traffic never reaches this advisor's prompt; it
+		// is recorded from the wrapped callbacks instead.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.tool_calls[0].name").value("weather"))
+			.andExpect(jsonPath("$.state.tool_calls[0].arguments").value(org.hamcrest.Matchers.containsString("Paris")))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value(org.hamcrest.Matchers.containsString("15 degrees")))
+			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
+		WeatherTool tool = new WeatherTool("15 degrees Celsius");
+
+		String content = ChatClient
+			.builder(new ScriptedChatModel(ScriptedChatModel.toolCall("weather", "{\"city\":\"Paris\"}"),
+					"It is 15 degrees Celsius in Paris."))
+			.defaultTools(tool)
+			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge()).order(JevSelfRefineAdvisor.BEFORE_TOOLS_ORDER).build())
+			.build()
+			.prompt("What is the weather in Paris?")
+			.call()
+			.content();
+
+		assertThat(content).isEqualTo("It is 15 degrees Celsius in Paris.");
+		assertThat(tool.calls()).isEqualTo(1);
+		this.mock.server().verify();
+	}
+
+	@Test
 	void reRunsTheToolsOnARetry() {
-		// The point of sitting before the tool loop: a tool that returned something wrong
-		// is asked again, and each attempt is judged against its own tool calls.
+		// The point of BEFORE_TOOLS_ORDER: a tool that returned something wrong is asked
+		// again, and each attempt is judged against its own tool calls.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
 			.andExpect(jsonPath("$.state.tool_calls.length()").value(1))
@@ -432,7 +459,11 @@ class JevSelfRefineAdvisorTests {
 					"It is -125 degrees Celsius in Paris.", ScriptedChatModel.toolCall("weather", "{\"city\":\"Paris\"}"),
 					"It is 15 degrees Celsius in Paris."))
 			.defaultTools(tool)
-			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge()).maxRepeatAttempts(3).build())
+			.defaultAdvisors(JevSelfRefineAdvisor.builder()
+				.judge(judge())
+				.order(JevSelfRefineAdvisor.BEFORE_TOOLS_ORDER)
+				.maxRepeatAttempts(3)
+				.build())
 			.build()
 			.prompt("What is the weather in Paris?")
 			.call()
@@ -467,6 +498,21 @@ class JevSelfRefineAdvisorTests {
 	}
 
 	/**
+	 * A tool whose result goes straight back to the caller.
+	 */
+	static class DirectTool {
+
+		private int calls;
+
+		@Tool(description = "Look up a record", returnDirect = true)
+		String lookup(String id) {
+			this.calls++;
+			return "record " + id;
+		}
+
+	}
+
+	/**
 	 * A weather tool that returns its scripted results in turn and counts its calls.
 	 */
 	static class WeatherTool {
@@ -496,13 +542,76 @@ class JevSelfRefineAdvisorTests {
 		// An outage says nothing about the answer, so by default it must not fail the call.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
-			.andRespond(MockTypeSafeServer.errorResponse(422, "malformed question"));
+			.andRespond(MockTypeSafeServer.errorResponse(503, "unavailable"));
 		ScriptedChatModel chatModel = new ScriptedChatModel("It is 15 degrees Celsius in Paris.");
 
 		String content = chatClient(chatModel, 3).prompt("What is the weather in Paris?").call().content();
 
 		assertThat(content).isEqualTo("It is 15 degrees Celsius in Paris.");
 		assertThat(chatModel.callCount()).isEqualTo(1);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void rethrowsAClientErrorEvenWhenFailingOpen() {
+		// A bad key or an invalid question is a misconfiguration, not an outage: failing
+		// open on it would silently turn judging off.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.errorResponse(422, "malformed question"));
+
+		assertThatExceptionOfType(TypeSafeException.class)
+			.isThrownBy(() -> chatClient(new ScriptedChatModel("It is 15 degrees Celsius in Paris."), 3)
+				.prompt("What is the weather in Paris?")
+				.call()
+				.content());
+		this.mock.server().verify();
+	}
+
+	@Test
+	void doesNotJudgeAToolResultReturnedDirectly() {
+		// A returnDirect tool's output is not the model's answer: judging it, and retrying
+		// on failure, would re-run a tool that may have side effects.
+		DirectTool tool = new DirectTool();
+
+		String content = ChatClient
+			.builder(new ScriptedChatModel(ScriptedChatModel.toolCall("lookup", "{\"id\":\"42\"}")))
+			.defaultTools(tool)
+			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge()).order(JevSelfRefineAdvisor.BEFORE_TOOLS_ORDER).build())
+			.build()
+			.prompt("Look up 42")
+			.call()
+			.content();
+
+		assertThat(content).contains("record 42");
+		assertThat(tool.calls).isEqualTo(1);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void prefersAJudgedAttemptOverOneFailFastLeftUnjudged() {
+		// Attempts 1 and 3 fail the code check and, under failFast, are never sent to Jev.
+		// Counting failures alone would prefer them (1 failure) to attempt 2 (1 failure,
+		// but one question passed); ranking by passed minus failed prefers attempt 2.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.jsonResponse(FAILING));
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.check("mentions_paris", input -> input.answer() != null && input.answer().contains("Paris"),
+					"does not mention Paris")
+			.score("helpfulness", HELPFULNESS, 2.0d)
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.failFast(true)
+			.build();
+
+		String content = ChatClient.builder(new ScriptedChatModel("It is cold.", "It is -125 degrees in Paris.", "Cold."))
+			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge).maxRepeatAttempts(2).build())
+			.build()
+			.prompt("What is the weather in Paris?")
+			.call()
+			.content();
+
+		assertThat(content).isEqualTo("It is -125 degrees in Paris.");
 		this.mock.server().verify();
 	}
 

@@ -37,7 +37,9 @@ public class JevSelfRefineFailedException extends TypeSafeException {
 	}
 
 	/**
-	 * @return the verdict of the final attempt, including every answer and probability
+	 * @return the verdict of the attempt the advisor would have returned — the best one,
+	 * with the most criteria passed net of those failed — including every answer and
+	 * probability
 	 */
 	public JevVerdict verdict() {
 		return this.verdict;

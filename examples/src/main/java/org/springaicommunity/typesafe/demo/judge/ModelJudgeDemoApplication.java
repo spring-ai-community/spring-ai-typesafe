@@ -58,12 +58,15 @@ public class ModelJudgeDemoApplication {
 	CommandLineRunner cli(ChatModel chatModel, TypeSafeClient typeSafeClient) {
 		return args -> {
 			// @formatter:off
-			// The advisor's default order sits before the tool loop, so a rejected answer
-			// is retried with a fresh call to the weather tool, and the tool calls of each
-			// attempt are recorded for the judge as `tool_calls`.
+			// BEFORE_TOOLS_ORDER places the advisor before the tool loop, so a rejected
+			// answer is retried with a fresh call to the weather tool, and the tool calls
+			// of each attempt are recorded for the judge as `tool_calls`. At the default
+			// order a retry would reuse the impossible value the tool already returned.
+			// This demo has no retrieval or memory advisor for that position to wrap.
 			ChatClient chatClient = ChatClient.builder(chatModel)
 					.defaultTools(new WeatherTools())
 					.defaultAdvisors(JevSelfRefineAdvisor.builder()
+							.order(JevSelfRefineAdvisor.BEFORE_TOOLS_ORDER)
 							.judge(createWeatherJudge(typeSafeClient))
 							.maxRepeatAttempts(10)
 							.build())

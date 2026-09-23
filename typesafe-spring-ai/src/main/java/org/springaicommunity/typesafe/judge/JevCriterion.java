@@ -61,7 +61,6 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 	 * @return the criterion
 	 */
 	static QuestionCriterion noul(String name, Noul noul, double minimum) {
-		Assert.isTrue(minimum >= 0.0d && minimum <= 1.0d, "minimum must be between 0 and 1 for a noul");
 		return new QuestionCriterion(name, noul, minimum, Set.of());
 	}
 
@@ -73,8 +72,6 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 	 * @return the criterion
 	 */
 	static QuestionCriterion score(String name, Score score, double minimum) {
-		Assert.isTrue(minimum >= 0.0d && minimum <= score.maxLevel(),
-				"minimum must be between 0 and the rubric's highest level (" + score.maxLevel() + ")");
 		return new QuestionCriterion(name, score, minimum, Set.of());
 	}
 
@@ -91,10 +88,7 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 		// Arrays.asList, not Set.of: Set.of rejects a repeated label outright and its
 		// iteration order is salted per JVM run, which would make the feedback text
 		// differ between runs. A duplicate here is harmless and simply collapses.
-		Set<String> accepted = new LinkedHashSet<>(Arrays.asList(acceptedOptions));
-		accepted.forEach(option -> Assert.isTrue(choice.criteria().containsKey(option),
-				"accepted option '" + option + "' is not one of the choice's options " + choice.criteria().keySet()));
-		return new QuestionCriterion(name, choice, 0.0d, accepted);
+		return new QuestionCriterion(name, choice, 0.0d, new LinkedHashSet<>(Arrays.asList(acceptedOptions)));
 	}
 
 	/**
@@ -137,10 +131,26 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 			Assert.hasText(name, "name must not be empty");
 			Assert.notNull(question, "question must not be null");
 			// An ordered, unmodifiable copy: Set.copyOf would discard declaration order,
-			// and
-			// the option list is quoted back to the model in the failure feedback.
+			// and the option list is quoted back to the model in the failure feedback.
 			acceptedOptions = acceptedOptions == null ? Set.of()
 					: Collections.unmodifiableSet(new LinkedHashSet<>(acceptedOptions));
+			// Validated here rather than in the factories, so a criterion built directly
+			// cannot be one that never passes.
+			if (question instanceof Noul) {
+				Assert.isTrue(minimum >= 0.0d && minimum <= 1.0d, "minimum must be between 0 and 1 for a noul");
+				Assert.isTrue(acceptedOptions.isEmpty(), "acceptedOptions only apply to a choice");
+			}
+			else if (question instanceof Score score) {
+				Assert.isTrue(minimum >= 0.0d && minimum <= score.maxLevel(),
+						"minimum must be between 0 and the rubric's highest level (" + score.maxLevel() + ")");
+				Assert.isTrue(acceptedOptions.isEmpty(), "acceptedOptions only apply to a choice");
+			}
+			else if (question instanceof Choice choice) {
+				Assert.notEmpty(acceptedOptions, "acceptedOptions must name at least one option");
+				Assert.noNullElements(acceptedOptions.toArray(), "acceptedOptions must not contain a null option");
+				acceptedOptions.forEach(option -> Assert.isTrue(choice.criteria().containsKey(option), "accepted option '"
+						+ option + "' is not one of the choice's options " + choice.criteria().keySet()));
+			}
 		}
 
 		/**
@@ -176,6 +186,8 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 		 * @return the copy
 		 */
 		public QuestionCriterion whenPassed(String criterion) {
+			Assert.state(this.dependsOn == null, () -> "criterion '" + this.name + "' already depends on '"
+					+ this.dependsOn.criterion() + "'; a criterion can depend on one other criterion only");
 			return new QuestionCriterion(this.name, this.question, this.minimum, this.acceptedOptions, this.appliesWhen,
 					new Dependency(criterion, Set.of()));
 		}
@@ -199,6 +211,8 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 		 * @return the copy
 		 */
 		public QuestionCriterion whenChosen(String choiceCriterion, String... labels) {
+			Assert.state(this.dependsOn == null, () -> "criterion '" + this.name + "' already depends on '"
+					+ this.dependsOn.criterion() + "'; a criterion can depend on one other criterion only");
 			Assert.notEmpty(labels, "labels must name at least one option");
 			Assert.noNullElements(labels, "labels must not contain null");
 			return new QuestionCriterion(this.name, this.question, this.minimum, this.acceptedOptions, this.appliesWhen,

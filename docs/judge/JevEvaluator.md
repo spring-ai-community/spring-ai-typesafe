@@ -75,8 +75,9 @@ JevJudge grounded = JevJudge.builder(typeSafeClient)
     .build();
 ```
 
-This is also how a groundedness check gets real evidence in a RAG setting, which the
-[self-refine advisor](JevSelfRefineAdvisor.md) cannot do when it is ordered before the tool loop.
+This is also how a groundedness check gets real evidence in a RAG setting. The
+[self-refine advisor](JevSelfRefineAdvisor.md) sees the retrieved context only at its default
+order, inside the retrieval advisor.
 
 ## See Also
 

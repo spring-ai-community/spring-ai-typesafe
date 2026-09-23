@@ -63,6 +63,8 @@ classDiagram
         +Question question
         +double minimum
         +Set~String~ acceptedOptions
+        +Predicate~JevJudgeInput~ appliesWhen
+        +Dependency dependsOn
     }
 
     class CodeCriterion {
@@ -86,8 +88,8 @@ classDiagram
 ```
 
 The shape to take from this: a judge is **a list of criteria and nothing else**. It holds a
-`TypeSafeClient` and spends exactly one call per `judge(...)`, whatever the number of
-criteria. Code checks run locally and add nothing to that — see [what comes back](#reading-the-verdict) for the other half.
+`TypeSafeClient` and spends at most one call per `judge(...)`, whatever the number of
+criteria. It makes none when no question applies, or when `failFast` skips it. Code checks run locally and add nothing to that — see [what comes back](#reading-the-verdict) for the other half.
 
 ## How JevJudge, the advisor and the evaluator fit together
 
@@ -381,7 +383,7 @@ public record JevVerdict(boolean passed, List<JevFinding> findings,
 ```
 
 Each `JevFinding` carries its criterion, the raw answer (`null` for a code check or a
-criterion that was not asked), an `Outcome`, and a `detail` sentence ready to hand back to a
+criterion that did not apply), an `Outcome`, and a `detail` sentence ready to hand back to a
 model. Only `FAILED` blocks the verdict:
 
 | Outcome | Meaning | Blocks? |
@@ -390,10 +392,12 @@ model. Only `FAILED` blocks the verdict:
 | `FAILED` | the criterion was not met | **yes** |
 | `INCONCLUSIVE` | too little probability supported the verdict | only with `failOnInconclusive(true)` |
 | `ERROR` | the service returned no answer, or one this SDK cannot read | only with `failOnError(true)` |
-| `NOT_APPLICABLE` | not asked: `appliesWhen` was false, or `failFast` skipped the call | no |
+| `NOT_APPLICABLE` | not asked (`appliesWhen` was false, or `failFast` skipped the call), or asked but its dependency (`whenChosen`, `whenPassed`) was not met, so its answer is set aside | no |
 
 `ERROR` and `NOT_APPLICABLE` findings are left out of the feedback, since neither is a
-defect the model can fix.
+defect the model can fix. `failOnInconclusive(true)` and `failOnError(true)` make a finding
+block by reporting it as `FAILED`: it then appears in `failures()` and in the feedback, not
+in `inconclusive()` or `errors()`.
 
 ```java
 verdict.failures().forEach(finding ->
@@ -418,13 +422,16 @@ model reads.
 
 ## Low confidence is undecided, not failed
 
-What decides whether a verdict can be acted on is not how *peaked* the answer's distribution
-is, but how much of it supports the *verdict*. For a score, that is the probability on the
-verdict's side of `minimum`: the levels at or above it when the score passes, those below
-when it fails. For a choice, it is the summed probability of the accepted options, or of the
-rejected ones. When that is below `minConfidence` (0.6 by default: a clear majority, where a
-coin flip is 0.5), the criterion is `INCONCLUSIVE`, and it does not block unless you set
-`failOnInconclusive(true)`.
+A score or choice is decided by where its probability lies. A score **passes** when at least
+half of its probability sits on levels at or above `minimum`. A choice passes when at least
+half sits on the accepted options, even if the single most likely label is another one.
+Without probabilities, the score's value, or the selected label, decides.
+
+Whether that verdict can be acted on is not a question of how *peaked* the distribution is,
+but of how much of it supports the *verdict*: the share on the passing side when it passes,
+on the failing side when it fails. When that share is below `minConfidence` (0.6 by default:
+a clear majority, where a coin flip is 0.5), the criterion is `INCONCLUSIVE`, and it does not
+block unless you set `failOnInconclusive(true)`.
 
 The difference matters. This distribution, recorded live, has a `confidence` of only 0.51
 because it is split between two levels, yet both levels pass a `minimum` of 2:

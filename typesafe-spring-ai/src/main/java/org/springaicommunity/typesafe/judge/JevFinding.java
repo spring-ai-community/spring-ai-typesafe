@@ -25,7 +25,7 @@ import org.springaicommunity.typesafe.response.Answer;
  * @param criterion the criterion that was checked
  * @param answer the Jev model's answer; {@code null} for a
  * {@link JevCriterion.CodeCriterion}, which is answered in code, and for a criterion that
- * was {@link Outcome#NOT_APPLICABLE} and so never asked
+ * was {@link Outcome#NOT_APPLICABLE}
  * @param outcome whether the criterion passed, failed or could not be decided
  * @param detail a sentence naming the defect, ready to be handed back to the model as
  * feedback; empty when the criterion passed
@@ -74,8 +74,11 @@ public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcom
 		ERROR,
 
 		/**
-		 * The criterion was not asked: its {@code appliesWhen} predicate did not hold, or
-		 * a failed code check skipped the call under {@code failFast}.
+		 * The criterion did not apply. Either it was not asked — its {@code appliesWhen}
+		 * predicate did not hold, or a failed code check skipped the call under
+		 * {@code failFast} — or it was asked in the same call but the criterion it depends
+		 * on ({@code whenChosen}, {@code whenPassed}) was not met, and its answer was set
+		 * aside.
 		 */
 		NOT_APPLICABLE
 

@@ -25,7 +25,11 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springaicommunity.typesafe.RetryPolicy;
+import org.springaicommunity.typesafe.exception.TypeSafeApiConnectionException;
+import org.springaicommunity.typesafe.exception.TypeSafeApiException;
 import org.springaicommunity.typesafe.exception.TypeSafeException;
+import org.springaicommunity.typesafe.judge.JevFinding;
 import org.springaicommunity.typesafe.judge.JevJudge;
 import org.springaicommunity.typesafe.judge.JevJudgeInput;
 import org.springaicommunity.typesafe.judge.JevVerdict;
@@ -47,6 +51,7 @@ import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.metadata.ToolMetadata;
@@ -80,37 +85,44 @@ import org.springframework.util.StringUtils;
  * <h3>What the judge can see</h3>
  *
  * The judged state is a {@link JevJudgeInput}: the system message and the conversation as
- * {@code user_question}, the final answer as {@code assistant_answer}, and any tool calls
- * found in the prompt as {@code tool_calls} — each assistant tool call paired, in order,
- * with the result its {@link ToolResponseMessage} carried: by id, or by tool name when
- * the provider leaves the id blank. Write a groundedness criterion against
- * {@code `tool_calls`}, since the value a tool returned legitimately appears nowhere in
- * the question.
+ * {@code user_question}, the final answer as {@code assistant_answer}, and the tool calls
+ * as {@code tool_calls}. Where the tool calls come from depends on the order, below. Write
+ * a groundedness criterion against {@code `tool_calls`}, since the value a tool returned
+ * legitimately appears nowhere in the question.
  *
  * <h3>Where it sits, and why</h3>
  *
- * The {@link #DEFAULT_ORDER default order} places the advisor after the chat memory
- * advisor ({@code HIGHEST_PRECEDENCE + 200}) and before the {@code ToolCallingAdvisor}
- * that {@code ChatClient} registers at {@code HIGHEST_PRECEDENCE + 300}. After memory, so
- * only the answer that is finally returned is remembered, not every rejected attempt.
- * Before the tool loop, so a retry re-runs the tools: a tool that returned something
- * wrong can return something else.
+ * The {@link #DEFAULT_ORDER default order}, {@code LOWEST_PRECEDENCE - 2000}, places the
+ * advisor inside the other advisors of a typical chain: inside chat memory
+ * ({@code HIGHEST_PRECEDENCE + 200}), so rejected attempts are not remembered; inside
+ * retrieval ({@code RetrievalAugmentationAdvisor}, order {@code 0}), so retrieval runs once
+ * per turn and the judge sees the retrieved context; and inside the
+ * {@code ToolCallingAdvisor} that {@code ChatClient} registers at
+ * {@code HIGHEST_PRECEDENCE + 300}. There the prompt it receives carries the tool calls
+ * and their results, each assistant tool call paired in order with its result — by id, or
+ * by tool name when the provider leaves the id blank — including those of earlier turns
+ * still in the prompt. A retry re-asks the model with that tool history; it does not
+ * re-run the tools.
  *
  * <p>
- * From there the tool traffic of the attempt never appears in the prompt this advisor
- * sees, so it records it instead: each tool callback on the request is wrapped for the
- * attempt, and every call and result is added to {@code tool_calls}. Only tools passed as
- * callbacks — {@code ChatClient.tools(...)}, {@code defaultTools(...)} — are recorded; a
- * tool resolved by name through a {@code ToolCallbackResolver} is not. Ordered after the
- * tool loop instead, the advisor reads tool calls from the prompt, but a retry re-asks
- * the model with the same tool history and does not re-run the tools.
+ * When a failure is best fixed by calling the tools again, order the advisor at
+ * {@link #BEFORE_TOOLS_ORDER}, between memory and the tool loop. A retry then re-runs the
+ * tools, and since the tool traffic no longer reaches this advisor's prompt it records it
+ * instead: each tool callback on the request is wrapped for the attempt, and every call
+ * and result goes into {@code tool_calls}. Only tools passed as callbacks —
+ * {@code ChatClient.tools(...)}, {@code defaultTools(...)} — are recorded, not tools resolved
+ * by name through a {@code ToolCallbackResolver}. The price of that position: it is also
+ * outside every advisor at order {@code 0}, so retrieval re-runs on each attempt and the
+ * judge does not see the retrieved context.
  *
  * <h3>When judging itself fails</h3>
  *
  * A TypeSafe outage or timeout says nothing about the answer. By default the advisor
- * {@linkplain JudgeErrorPolicy#FAIL_OPEN fails open}: it logs the error and returns the
- * response it could not judge, rather than failing a chat call whose answer may be fine.
- * Choose {@link JudgeErrorPolicy#FAIL_CLOSED} where an unjudged answer must never ship.
+ * {@linkplain JudgeErrorPolicy#FAIL_OPEN fails open} on such transient failures — a
+ * connection error or timeout, 408, 429 or a 5xx, the same ones the client retries — and
+ * returns the response it could not judge. A client error such as a bad API key or an
+ * invalid question is a misconfiguration, not an outage, and is always rethrown. Choose
+ * {@link JudgeErrorPolicy#FAIL_CLOSED} where an unjudged answer must never ship.
  *
  * @author Christian Tzolov
  */
@@ -124,12 +136,19 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	public static final int MAX_REPEAT_ATTEMPTS_LIMIT = 100;
 
 	/**
-	 * The default order: after chat memory ({@code HIGHEST_PRECEDENCE + 200}), so
-	 * rejected attempts are not remembered, and before the tool loop
-	 * ({@code HIGHEST_PRECEDENCE +
-	 * 300}), so a retry re-runs the tools.
+	 * The default order: inside chat memory, retrieval and the tool loop, so memory keeps
+	 * only the final answer, retrieval runs once per turn and the judge sees both the
+	 * retrieved context and the tool calls.
 	 */
-	public static final int DEFAULT_ORDER = Ordered.HIGHEST_PRECEDENCE + 250;
+	public static final int DEFAULT_ORDER = BaseAdvisor.LOWEST_PRECEDENCE - 2000;
+
+	/**
+	 * An order between chat memory ({@code HIGHEST_PRECEDENCE + 200}) and the tool loop
+	 * ({@code HIGHEST_PRECEDENCE + 300}), where a retry re-runs the tools and their calls
+	 * are recorded for the judge. It is also outside every advisor at order {@code 0},
+	 * retrieval included.
+	 */
+	public static final int BEFORE_TOOLS_ORDER = Ordered.HIGHEST_PRECEDENCE + 250;
 
 	private static final Logger logger = LoggerFactory.getLogger(JevSelfRefineAdvisor.class);
 
@@ -223,7 +242,7 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 				verdict = this.judge.judge(judgeInput(chatClientRequest, response, recorded));
 			}
 			catch (TypeSafeException ex) {
-				if (this.judgeErrorPolicy == JudgeErrorPolicy.FAIL_CLOSED) {
+				if (this.judgeErrorPolicy == JudgeErrorPolicy.FAIL_CLOSED || !isTransient(ex)) {
 					throw ex;
 				}
 				logger.warn("Jev judgement could not be made on attempt {}, returning the response unjudged: {}",
@@ -236,9 +255,11 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 				return response;
 			}
 
-			// A later attempt is not necessarily a better one. Keep the attempt with the
-			// fewest failures; on a tie the later one, which was told about more defects.
-			if (bestVerdict == null || verdict.failures().size() <= bestVerdict.failures().size()) {
+			// A later attempt is not necessarily a better one. Keep the attempt with the most
+			// criteria passed net of those failed: an attempt that failFast or a failed
+			// dependency left mostly unjudged passes little. On a tie the later one, which
+			// was told about more defects.
+			if (bestVerdict == null || standing(verdict) >= standing(bestVerdict)) {
 				bestResponse = response;
 				bestVerdict = verdict;
 				bestAttempt = attempt;
@@ -302,6 +323,36 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 			.toList();
 		ToolCallingChatOptions recordingOptions = toolOptions.mutate().toolCallbacks(wrapped).build();
 		return request.mutate().prompt(request.prompt().mutate().chatOptions(recordingOptions).build()).build();
+	}
+
+	private static long standing(JevVerdict verdict) {
+		long passed = verdict.findings()
+			.stream()
+			.filter(finding -> finding.outcome() == JevFinding.Outcome.PASSED)
+			.count();
+		return passed - verdict.failures().size();
+	}
+
+	/**
+	 * Whether a judging failure is an outage worth riding out rather than a
+	 * misconfiguration: the failures the client itself retries.
+	 */
+	private static boolean isTransient(TypeSafeException ex) {
+		if (ex instanceof TypeSafeApiException apiException) {
+			int status = apiException.status();
+			return RetryPolicy.DEFAULT_RETRYABLE_STATUSES.contains(status) || status >= 500;
+		}
+		return ex instanceof TypeSafeApiConnectionException;
+	}
+
+	/**
+	 * A {@code returnDirect} tool hands its output straight back as the response. That is
+	 * not the model's answer, so there is nothing to judge, and a retry would re-run a
+	 * tool that may have side effects.
+	 */
+	static boolean isToolResultReturnedDirectly(ChatClientResponse response) {
+		return response.chatResponse() != null && response.chatResponse().getResult() != null
+				&& response.chatResponse().getResult().getMetadata().containsKey(ToolExecutionResult.METADATA_TOOL_NAME);
 	}
 
 	/**
@@ -485,7 +536,8 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 		private boolean failOnExhaustedAttempts = false;
 
 		private BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate = (request,
-				response) -> response.chatResponse() == null || response.chatResponse().hasToolCalls();
+				response) -> response.chatResponse() == null || response.chatResponse().hasToolCalls()
+						|| isToolResultReturnedDirectly(response);
 
 		private JudgeErrorPolicy judgeErrorPolicy = JudgeErrorPolicy.FAIL_OPEN;
 

@@ -34,6 +34,7 @@ import org.springaicommunity.typesafe.response.ScoreAnswer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -224,8 +225,7 @@ class JevJudgeTests {
 
 		assertThat(verdict.passed()).isFalse();
 		assertThat(verdict.feedback())
-			.contains("tone: classified as \"dismissive\" (0.68 of the probability on unacceptable options)")
-			.contains("acceptable values are");
+			.contains("tone: 0.68 of the probability is on options outside [helpful, neutral] (most likely \"dismissive\")");
 	}
 
 	@Test
@@ -666,6 +666,92 @@ class JevJudgeTests {
 				.choice("mode", MODE, "answered")
 				.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "refused")))
 			.withMessageContaining("'refused' is not one of the options");
+	}
+
+	@Test
+	void neverNamesThePassingLevelAsTheLevelAFailingScoreReached() {
+		// 1.8 rounds to level 2, the level required; the feedback must not claim it was
+		// reached.
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":1.8,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"1":0.7,"3":0.3},"confidence":0.7},
+				  "is_plausible":{"type":"noul","noul":0.97}
+				},"usage":{}}""");
+
+		JevVerdict verdict = judge().judge("q", "a");
+
+		assertThat(verdict.feedback()).contains(
+				"helpfulness: rated \"Mostly unhelpful: misses the main point\" (1.80), needs to reach 2.00 which is \"Mostly helpful: minor gaps remain\"");
+	}
+
+	@Test
+	void decidesAScoreFromWhereItsProbabilityLiesRatherThanItsExpectedValue() {
+		// Expected value 1.8 is below 2, but 60% of the probability is on a passing level:
+		// pass/fail and its support are decided from the same split, so this passes.
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":1.8,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"0":0.4,"3":0.6},"confidence":0.6},
+				  "is_plausible":{"type":"noul","noul":0.97}
+				},"usage":{}}""");
+
+		assertThat(judge().judge("q", "a").summary()).isEqualTo("passed=true [helpfulness=PASSED, is_plausible=PASSED]");
+	}
+
+	@Test
+	void passesAChoiceWhoseAcceptedOptionsTogetherOutweighTheTopLabel() {
+		QuestionCriterion tone = JevCriterion.choice("tone",
+				Choice.of("What tone?", "helpful", "neutral", "dismissive"), "helpful", "neutral");
+		ChoiceAnswer answer = new ChoiceAnswer("dismissive",
+				Map.of("helpful", 0.3d, "neutral", 0.3d, "dismissive", 0.4d), 0.2d);
+
+		assertThat(JevJudge.choicePasses(tone, answer)).isTrue();
+		assertThat(JevJudge.choiceSupport(tone, answer, true)).isCloseTo(0.6d, within(1e-9));
+	}
+
+	@Test
+	void doesNotFollowAnUndecidedChoiceEvenWhenUndecidedCountsAsFailed() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "mode":{"type":"choice","choice":"answered",
+				    "probabilities":{"answered":0.5,"clarification_needed":0.5},"confidence":0.1},
+				  "has_details":{"type":"noul","noul":0.05}
+				},"usage":{}}""");
+
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.choice("mode", MODE, "answered")
+			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
+			.failOnInconclusive(true)
+			.build();
+
+		JevVerdict verdict = judge.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [mode=FAILED, has_details=NOT_APPLICABLE]");
+		assertThat(verdict.feedback()).doesNotContain("has_details");
+	}
+
+	@Test
+	void validatesACriterionBuiltDirectlyAsStrictlyAsTheFactories() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> new QuestionCriterion("helpfulness", HELPFULNESS, 7.0d, java.util.Set.of()))
+			.withMessageContaining("highest level");
+		assertThatIllegalArgumentException().isThrownBy(() -> new QuestionCriterion("tone", MODE, 0.0d, java.util.Set.of()))
+			.withMessageContaining("at least one option");
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> new QuestionCriterion("tone", MODE, 0.0d, java.util.Set.of("refused")))
+			.withMessageContaining("not one of the choice's options");
+	}
+
+	@Test
+	void rejectsASecondDependencyRatherThanReplacingTheFirst() {
+		assertThatIllegalStateException()
+			.isThrownBy(() -> JevCriterion.noul("has_details", DETAILS, 0.7d)
+				.whenChosen("mode", "answered")
+				.whenPassed("searched"))
+			.withMessageContaining("already depends on 'mode'");
 	}
 
 	private JevJudge branchingJudge() {
