@@ -148,11 +148,13 @@ The two compose, and they do different jobs.
 [`JevGuardrailAdvisor`](../guardrails/JevGuardrailAdvisor.md) defaults to
 `LOWEST_PRECEDENCE - 1000`, which places it *inside* the self-refine loop, nearer the model.
 It screens every attempt, so an unsafe draft is replaced by the refusal before it is judged.
+See [where the guardrail sits](../guardrails/JevGuardrailAdvisor.md#where-it-sits) for the
+alternative of screening once per turn.
 
 ```java
 .defaultAdvisors(
     JevSelfRefineAdvisor.builder().judge(judge).build(),          // quality, retries
-    JevGuardrailAdvisor.builder(typeSafeClient).build())          // safety, last word
+    JevGuardrailAdvisor.builder(typeSafeClient).build())          // safety, every attempt
 ```
 
 Retrying does not help a guardrail: an unsafe answer is not a draft.

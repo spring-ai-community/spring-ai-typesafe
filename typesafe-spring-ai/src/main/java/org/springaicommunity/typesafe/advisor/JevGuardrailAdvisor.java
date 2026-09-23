@@ -55,9 +55,12 @@ import org.springframework.util.Assert;
  * <p>
  * This is a different job from {@link JevSelfRefineAdvisor}, which judges quality and
  * retries to improve it. Retrying does not help here: an unsafe answer is not a draft.
- * Place this one nearer the model (a higher order value runs later, closer to the call)
- * so it sees the final text, and note that the two compose — evaluation can retry while
- * the guardrail still has the last word.
+ * The two compose. At the default order this advisor sits nearer the model than both the
+ * self-refine advisor and Spring AI's tool loop (a higher order value runs later, closer to
+ * the call), so it screens every model call: each retry attempt is screened before it is
+ * judged, and the input battery runs on each call too. Order it before the self-refine
+ * advisor, for example at {@code HIGHEST_PRECEDENCE + 150}, to screen only the original
+ * request and the final answer, once per turn.
  *
  * <pre>{@code
  * ChatClient.builder(chatModel)
