@@ -277,6 +277,42 @@ JevJudge judge = JevJudge.builder(typeSafeClient)
 
 When no question applies, no call is made and `verdict.response()` is `null`.
 
+### Criteria that depend on other answers
+
+Rubrics branch. An answer that asks which Springfield is meant should not be marked down for
+leaving out the forecast's timing. `whenChosen` and `whenPassed` make a question depend on
+another criterion's outcome:
+
+```java
+JevJudge judge = JevJudge.builder(typeSafeClient)
+    .choice("mode", Choice.builder()
+        .instructions("How does `assistant_answer` respond to `user_question`?")
+        .option("answered", "Gives the weather")
+        .option("clarification_needed", "Asks which place is meant")
+        .build(), "answered", "clarification_needed")
+    .criterion(JevCriterion.noul("has_details", detailsNoul, 0.7d)
+        .whenChosen("mode", "answered"))
+    .build();
+```
+
+- **The branch costs nothing.** Jev answers every question in one parallel call, so
+  `has_details` is asked anyway, and the dependency is resolved in Java afterwards. Other
+  judge frameworks walk such a graph one model call per node.
+- When the choice lands elsewhere, the dependent is `NOT_APPLICABLE`, with detail
+  `has_details: does not apply, mode was "clarification_needed"`. It neither passes nor
+  fails.
+- An undecided dependency (`INCONCLUSIVE`, `ERROR` or `NOT_APPLICABLE`) makes its dependents
+  `NOT_APPLICABLE` too: nothing was selected for them to rely on.
+- `whenPassed("name")` depends on a criterion having passed. That criterion can be a
+  [code check](#code-criteria).
+- A dependency must be declared **before** its dependents, which rules out cycles. A
+  `whenChosen` label must be one of the choice's options. Both are checked when the judge is
+  built.
+
+`appliesWhen` and a dependency combine. `appliesWhen` is judged on the input before the call,
+and a false result means the question is not sent at all. The dependency is judged on the
+findings after the call.
+
 ## Reading the verdict
 
 `judge(...)` returns one verdict carrying one finding per criterion, so the dimensions stay

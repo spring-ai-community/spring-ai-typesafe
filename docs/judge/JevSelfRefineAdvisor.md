@@ -38,10 +38,10 @@ String answer = chatClient.prompt("What is the weather in Paris?").call().conten
 |---|---|---|---|
 | `judge(JevJudge)` | `JevJudge` | — (**required**) | What to evaluate each response against. |
 | `maxRepeatAttempts(int)` | `int` | `3` | Retries after the first attempt. Capped at `MAX_REPEAT_ATTEMPTS_LIMIT` (100). |
-| `failOnExhaustedAttempts(boolean)` | `boolean` | `false` | Throw `JevSelfRefineFailedException` instead of returning the best effort. |
+| `failOnExhaustedAttempts(boolean)` | `boolean` | `false` | Throw `JevSelfRefineFailedException` instead of returning the best attempt. |
 | `skipEvaluationPredicate(BiPredicate<ChatClientRequest, ChatClientResponse>)` | — | skips when the response has tool calls | A tool call is not an answer yet, so there is nothing to judge. |
 | `judgeErrorPolicy(JudgeErrorPolicy)` | `JudgeErrorPolicy` | `FAIL_OPEN` | What to do when the judging call itself fails. See [when judging fails](#when-judging-fails). |
-| `order(int)` | `int` | `LOWEST_PRECEDENCE - 2000` | Where in the advisor chain this runs. |
+| `order(int)` | `int` | `DEFAULT_ORDER` (`HIGHEST_PRECEDENCE + 250`) | Where in the advisor chain this runs. See [where it sits](#where-it-sits-and-why). |
 
 !!! note "Retry until it passes is not supported"
     `maxRepeatAttempts` is capped deliberately. Each attempt is a model call *plus* a
@@ -74,24 +74,37 @@ against that field:
 Whether a tool was called at all is better settled by a
 [code check](JevJudge.md#code-criteria) than asked of Jev.
 
-!!! warning "Advisor order decides what the judge sees, and what a retry can fix"
-    In Spring AI 2.x, `ChatClient` runs the tool loop in a `ToolCallingAdvisor` registered at
-    `HIGHEST_PRECEDENCE + 300`. Where this advisor sits relative to it is a trade-off:
+## Where it sits, and why
 
-| Order | The judge sees | A retry |
-|---|---|---|
-| after it (the default, `LOWEST_PRECEDENCE - 2000`) | every tool call and result, in `tool_calls` | re-asks the model with the same tool history; tools are **not** re-run |
-| before it (e.g. `HIGHEST_PRECEDENCE + 100`) | the original prompt and the final answer only; no `tool_calls` | re-runs the whole tool loop, so a tool can return something new |
+`ChatClient` registers chat memory at `HIGHEST_PRECEDENCE + 200` and runs the tool loop in a
+`ToolCallingAdvisor` at `HIGHEST_PRECEDENCE + 300`. The advisor's default,
+`DEFAULT_ORDER = HIGHEST_PRECEDENCE + 250`, sits between the two:
 
-    Pick *after* when the judge must check the answer against tool results. Pick *before*
-    when a failure is best fixed by calling the tools again: the
-    [weather demo](../demos.md#modeljudgedemoapplication) does this, because its tool
-    returns a different value on each call.
+| Placement | Why |
+|---|---|
+| **after chat memory** | memory records only the answer finally returned, not every rejected attempt |
+| **before the tool loop** | a retry re-runs the tools, so a tool that returned something wrong can return something else |
+
+From there, the attempt's tool traffic never appears in the prompt this advisor sees. So it
+**records** it: for each attempt, the request's tool callbacks are wrapped, and every call
+lands in `tool_calls` with its arguments and result. Each attempt is judged against its own
+tool calls.
+
+!!! note "Recorded tools"
+    Tools passed as callbacks, through `ChatClient.tools(...)` or `defaultTools(...)`, are
+    recorded. A tool resolved by name through a `ToolCallbackResolver` is not.
+
+Ordered *after* the tool loop instead, for example with `.order(BaseAdvisor.LOWEST_PRECEDENCE
+- 2000)` (the 0.1.0 default), the advisor reads tool calls from the prompt. A retry then
+re-asks the model with the same tool history and does **not** re-run the tools: in live runs
+the model never recovered from a bad tool result that way. Placed before chat memory
+(below `+200`), every rejected attempt is written to memory.
 
 ## Failing hard
 
-By default the advisor returns the best effort once attempts run out, which matches
-self-refine convention. Turn that around where shipping a rejected answer is worse than
+By default the advisor returns the **best attempt** once attempts run out: the one with the
+fewest failed criteria, the later one on a tie. A later attempt is not necessarily a better
+one, so the last is not returned just for being last. Turn that around where shipping a rejected answer is worse than
 failing:
 
 ```java
@@ -133,8 +146,8 @@ code checks is a bug in the check, and always propagates.
 
 The two compose, and they do different jobs.
 [`JevGuardrailAdvisor`](../guardrails/JevGuardrailAdvisor.md) defaults to
-`LOWEST_PRECEDENCE - 1000`, which runs it *later* — nearer the model — so it screens the
-answer self-refinement settled on rather than an intermediate draft.
+`LOWEST_PRECEDENCE - 1000`, which places it *inside* the self-refine loop, nearer the model.
+It screens every attempt, so an unsafe draft is replaced by the refusal before it is judged.
 
 ```java
 .defaultAdvisors(

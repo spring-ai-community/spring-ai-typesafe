@@ -61,6 +61,17 @@ class JevJudgeTests {
 		.whenFalse("Contains an impossible or absurd value")
 		.build();
 
+	private static final Choice MODE = Choice.builder()
+		.instructions("How does `assistant_answer` respond to `user_question`?")
+		.option("answered", "Gives the weather")
+		.option("clarification_needed", "Asks which place is meant")
+		.build();
+
+	private static final Noul DETAILS = Noul.builder()
+		.instructions("Does `assistant_answer` give timing and a source?")
+		.whenFalse("Gives no timing or source")
+		.build();
+
 	private static final String PLAUSIBLE_ONLY = """
 			{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.95}},"usage":{}}""";
 
@@ -564,6 +575,113 @@ class JevJudgeTests {
 
 		assertThat(judge.judge("q", "a").passed()).isTrue();
 		this.mock.server().verify();
+	}
+
+	@Test
+	void skipsTheDetailsCheckWhenTheAnswerAskedForClarification() {
+		// The branch costs nothing: has_details is still asked in the same call, but a
+		// clarifying question is not judged on details it was never meant to have.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.questions.has_details.type").value("noul"))
+			.andRespond(MockTypeSafeServer.jsonResponse(modeAnd("clarification_needed", 0.05d)));
+
+		JevVerdict verdict = branchingJudge().judge("Weather in Springfield?", "Which Springfield do you mean?");
+
+		assertThat(verdict.passed()).isTrue();
+		assertThat(verdict.summary()).isEqualTo("passed=true [mode=PASSED, has_details=NOT_APPLICABLE]");
+		assertThat(verdict.notApplicable()).singleElement()
+			.satisfies(finding -> assertThat(finding.detail())
+				.isEqualTo("has_details: does not apply, mode was \"clarification_needed\""));
+		this.mock.server().verify();
+	}
+
+	@Test
+	void judgesTheDetailsCheckWhenTheAnswerAnswered() {
+		respondWith(modeAnd("answered", 0.05d));
+
+		JevVerdict verdict = branchingJudge().judge("Weather in Paris?", "Nice.");
+
+		assertThat(verdict.passed()).isFalse();
+		assertThat(verdict.summary()).isEqualTo("passed=false [mode=PASSED, has_details=FAILED]");
+	}
+
+	@Test
+	void treatsAnUndecidedChoiceAsNotSelectingTheBranch() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "mode":{"type":"choice","choice":"answered",
+				    "probabilities":{"answered":0.5,"clarification_needed":0.5},"confidence":0.1},
+				  "has_details":{"type":"noul","noul":0.05}
+				},"usage":{}}""");
+
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.choice("mode", MODE, "answered")
+			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
+			.build();
+
+		JevVerdict verdict = judge.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=true [mode=INCONCLUSIVE, has_details=NOT_APPLICABLE]");
+		assertThat(verdict.notApplicable().get(0).detail()).isEqualTo("has_details: does not apply, mode was INCONCLUSIVE");
+	}
+
+	@Test
+	void appliesOnlyAfterACodeCheckPassed() {
+		respondWith(PLAUSIBLE_ONLY);
+
+		JevJudge judge = JevJudge.builder(this.mock.client())
+			.check("searched", input -> !input.toolCalls().isEmpty(), "no search was made")
+			.criterion(JevCriterion.noul("is_plausible", PLAUSIBLE, 0.7d).whenPassed("searched"))
+			.build();
+
+		JevVerdict verdict = judge.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [searched=FAILED, is_plausible=NOT_APPLICABLE]");
+		assertThat(verdict.feedback()).isEqualTo("- searched: no search was made");
+	}
+
+	@Test
+	void rejectsADependencyOnACriterionNotYetDeclared() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> JevJudge.builder(this.mock.client())
+				.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
+				.choice("mode", MODE, "answered"))
+			.withMessageContaining("must be declared before it");
+	}
+
+	@Test
+	void rejectsWhenChosenOnSomethingOtherThanAChoice() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> JevJudge.builder(this.mock.client())
+				.noul("is_plausible", PLAUSIBLE, 0.7d)
+				.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("is_plausible", "answered")))
+			.withMessageContaining("not a choice");
+	}
+
+	@Test
+	void rejectsAWhenChosenLabelTheChoiceDoesNotOffer() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> JevJudge.builder(this.mock.client())
+				.choice("mode", MODE, "answered")
+				.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "refused")))
+			.withMessageContaining("'refused' is not one of the options");
+	}
+
+	private JevJudge branchingJudge() {
+		return JevJudge.builder(this.mock.client())
+			.choice("mode", MODE, "answered", "clarification_needed")
+			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
+			.build();
+	}
+
+	private static String modeAnd(String mode, double details) {
+		return """
+				{"model":"jev-1.13.0","answers":{
+				  "mode":{"type":"choice","choice":"%s",
+				    "probabilities":{"%s":0.9},"confidence":0.9},
+				  "has_details":{"type":"noul","noul":%s}
+				},"usage":{}}""".formatted(mode, mode, details);
 	}
 
 	private JevJudge searchJudge() {

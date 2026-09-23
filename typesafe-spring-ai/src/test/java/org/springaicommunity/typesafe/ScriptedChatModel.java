@@ -27,7 +27,9 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 
 /**
  * A chat model that replies with a scripted sequence of answers and records the prompts it
@@ -43,14 +45,43 @@ public class ScriptedChatModel implements ChatModel {
 
 	private final List<Prompt> receivedPrompts = new ArrayList<>();
 
+	private static final String TOOL_CALL_PREFIX = "\u0000tool-call:";
+
 	public ScriptedChatModel(String... answers) {
 		this.answers.addAll(List.of(answers));
+	}
+
+	/**
+	 * A scripted step that asks for a tool call instead of answering.
+	 * @param toolName the tool to call
+	 * @param arguments the JSON arguments
+	 * @return the step, to pass among the constructor's answers
+	 */
+	public static String toolCall(String toolName, String arguments) {
+		return TOOL_CALL_PREFIX + toolName + "\u0000" + arguments;
+	}
+
+	/**
+	 * Tool-calling options, so {@code ChatClient} keeps the tools it is given and runs its
+	 * tool loop, as it would for a real provider.
+	 */
+	@Override
+	public ChatOptions getOptions() {
+		return ToolCallingChatOptions.builder().build();
 	}
 
 	@Override
 	public ChatResponse call(Prompt prompt) {
 		this.receivedPrompts.add(prompt);
 		String answer = this.answers.isEmpty() ? "" : this.answers.poll();
+		if (answer.startsWith(TOOL_CALL_PREFIX)) {
+			String[] parts = answer.substring(TOOL_CALL_PREFIX.length()).split("\u0000", 2);
+			AssistantMessage toolCall = AssistantMessage.builder()
+				.toolCalls(List.of(new AssistantMessage.ToolCall("call_" + this.receivedPrompts.size(), "function",
+						parts[0], parts[1])))
+				.build();
+			return new ChatResponse(List.of(new Generation(toolCall)));
+		}
 		return new ChatResponse(List.of(new Generation(new AssistantMessage(answer))));
 	}
 

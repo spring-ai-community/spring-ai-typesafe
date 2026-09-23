@@ -16,11 +16,9 @@
 
 package org.springaicommunity.typesafe.advisor;
 
-
-
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiPredicate;
 import java.util.stream.Collectors;
 
@@ -45,7 +43,14 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
+import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.ai.tool.metadata.ToolMetadata;
+import org.springframework.core.Ordered;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -76,20 +81,29 @@ import org.springframework.util.StringUtils;
  *
  * The judged state is a {@link JevJudgeInput}: the system message and the conversation as
  * {@code user_question}, the final answer as {@code assistant_answer}, and any tool calls
- * found in the prompt as {@code tool_calls} — each assistant tool call paired, in order, with
- * the result its {@link ToolResponseMessage} carried: by id, or by tool name when the
- * provider leaves the id blank. Write a groundedness criterion against
- * {@code `tool_calls`}, since the value a tool returned legitimately appears nowhere in the
- * question.
+ * found in the prompt as {@code tool_calls} — each assistant tool call paired, in order,
+ * with the result its {@link ToolResponseMessage} carried: by id, or by tool name when
+ * the provider leaves the id blank. Write a groundedness criterion against
+ * {@code `tool_calls`}, since the value a tool returned legitimately appears nowhere in
+ * the question.
+ *
+ * <h3>Where it sits, and why</h3>
+ *
+ * The {@link #DEFAULT_ORDER default order} places the advisor after the chat memory
+ * advisor ({@code HIGHEST_PRECEDENCE + 200}) and before the {@code ToolCallingAdvisor}
+ * that {@code ChatClient} registers at {@code HIGHEST_PRECEDENCE + 300}. After memory, so
+ * only the answer that is finally returned is remembered, not every rejected attempt.
+ * Before the tool loop, so a retry re-runs the tools: a tool that returned something
+ * wrong can return something else.
  *
  * <p>
- * Tool calls only reach this advisor when they are in the prompt it receives, and that
- * depends on its order relative to the {@code ToolCallingAdvisor} that {@code ChatClient}
- * registers at {@code HIGHEST_PRECEDENCE + 300}. Ordered after it — the default order
- * does this — the advisor runs inside the tool loop and sees every call and result. A retry
- * then re-asks the model with that history, but does not re-run the tools. Ordered before
- * it, a retry re-runs the whole tool loop, but the advisor sees only the original prompt
- * and the finished answer, so {@code tool_calls} is absent.
+ * From there the tool traffic of the attempt never appears in the prompt this advisor
+ * sees, so it records it instead: each tool callback on the request is wrapped for the
+ * attempt, and every call and result is added to {@code tool_calls}. Only tools passed as
+ * callbacks — {@code ChatClient.tools(...)}, {@code defaultTools(...)} — are recorded; a
+ * tool resolved by name through a {@code ToolCallbackResolver} is not. Ordered after the
+ * tool loop instead, the advisor reads tool calls from the prompt, but a retry re-asks
+ * the model with the same tool history and does not re-run the tools.
  *
  * <h3>When judging itself fails</h3>
  *
@@ -103,10 +117,19 @@ import org.springframework.util.StringUtils;
 public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 
 	/**
-	 * The largest accepted {@code maxRepeatAttempts}. Every attempt is a model call plus a
-	 * judging call, so an unbounded retry budget is a runaway cost rather than a feature.
+	 * The largest accepted {@code maxRepeatAttempts}. Every attempt is a model call plus
+	 * a judging call, so an unbounded retry budget is a runaway cost rather than a
+	 * feature.
 	 */
 	public static final int MAX_REPEAT_ATTEMPTS_LIMIT = 100;
+
+	/**
+	 * The default order: after chat memory ({@code HIGHEST_PRECEDENCE + 200}), so
+	 * rejected attempts are not remembered, and before the tool loop
+	 * ({@code HIGHEST_PRECEDENCE +
+	 * 300}), so a retry re-runs the tools.
+	 */
+	public static final int DEFAULT_ORDER = Ordered.HIGHEST_PRECEDENCE + 250;
 
 	private static final Logger logger = LoggerFactory.getLogger(JevSelfRefineAdvisor.class);
 
@@ -132,8 +155,9 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	private final JudgeErrorPolicy judgeErrorPolicy;
 
 	/**
-	 * What to do when the judging call itself fails — the TypeSafe service is unreachable,
-	 * times out or answers with an error. Such a failure says nothing about the answer.
+	 * What to do when the judging call itself fails — the TypeSafe service is
+	 * unreachable, times out or answers with an error. Such a failure says nothing about
+	 * the answer.
 	 */
 	public enum JudgeErrorPolicy {
 
@@ -146,8 +170,7 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	}
 
 	private JevSelfRefineAdvisor(JevJudge judge, int advisorOrder, int maxRepeatAttempts,
-			boolean failOnExhaustedAttempts,
-			BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate,
+			boolean failOnExhaustedAttempts, BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate,
 			JudgeErrorPolicy judgeErrorPolicy) {
 		this.judge = judge;
 		this.advisorOrder = advisorOrder;
@@ -173,14 +196,19 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 		Assert.notNull(callAdvisorChain, "callAdvisorChain must not be null");
 
 		ChatClientRequest request = chatClientRequest;
+		ChatClientResponse bestResponse = null;
+		JevVerdict bestVerdict = null;
+		int bestAttempt = 0;
 
 		// Unbounded on purpose: the exit is the attempt > maxRepeatAttempts check below,
-		// which always returns or throws. A `attempt <= maxRepeatAttempts + 1` bound would
+		// which always returns or throws. A `attempt <= maxRepeatAttempts + 1` bound
+		// would
 		// overflow to Integer.MIN_VALUE for a large maxRepeatAttempts and skip the body
 		// entirely, failing the call without ever reaching the model.
 		for (int attempt = 1;; attempt++) {
 
-			ChatClientResponse response = callAdvisorChain.copy(this).nextCall(request);
+			List<JevJudgeInput.ToolCall> recorded = new CopyOnWriteArrayList<>();
+			ChatClientResponse response = callAdvisorChain.copy(this).nextCall(recordingToolCalls(request, recorded));
 
 			// A tool call is not an answer yet, so there is nothing to judge. The
 			// predicate is given the request that actually produced this response, which
@@ -192,7 +220,7 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 
 			JevVerdict verdict;
 			try {
-				verdict = this.judge.judge(judgeInput(chatClientRequest, response));
+				verdict = this.judge.judge(judgeInput(chatClientRequest, response, recorded));
 			}
 			catch (TypeSafeException ex) {
 				if (this.judgeErrorPolicy == JudgeErrorPolicy.FAIL_CLOSED) {
@@ -208,13 +236,22 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 				return response;
 			}
 
+			// A later attempt is not necessarily a better one. Keep the attempt with the
+			// fewest failures; on a tie the later one, which was told about more defects.
+			if (bestVerdict == null || verdict.failures().size() <= bestVerdict.failures().size()) {
+				bestResponse = response;
+				bestVerdict = verdict;
+				bestAttempt = attempt;
+			}
+
 			if (attempt > this.maxRepeatAttempts) {
 				if (this.failOnExhaustedAttempts) {
-					throw new JevSelfRefineFailedException(this.maxRepeatAttempts, verdict);
+					throw new JevSelfRefineFailedException(this.maxRepeatAttempts, bestVerdict);
 				}
-				logger.warn("Jev judgement still failing after {} attempts, returning the last response. {}{}{}",
-						this.maxRepeatAttempts, verdict.summary(), System.lineSeparator(), verdict.feedback());
-				return response;
+				logger.warn("Jev judgement still failing after {} attempts, returning attempt {} of {}. {}{}{}",
+						this.maxRepeatAttempts, bestAttempt, attempt, bestVerdict.summary(), System.lineSeparator(),
+						bestVerdict.feedback());
+				return bestResponse;
 			}
 
 			logger.warn("Jev judgement failed on attempt {}: {}{}{}", attempt, verdict.summary(),
@@ -227,8 +264,7 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	@Override
 	public Flux<ChatClientResponse> adviseStream(ChatClientRequest chatClientRequest,
 			StreamAdvisorChain streamAdvisorChain) {
-		return Flux
-			.error(new UnsupportedOperationException("The Jev Self-Refine Advisor does not support streaming."));
+		return Flux.error(new UnsupportedOperationException("The Jev Self-Refine Advisor does not support streaming."));
 	}
 
 	/**
@@ -236,17 +272,42 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	 * original request, not the feedback-augmented one, so the judge never sees its own
 	 * previous feedback as part of the question.
 	 */
-	private JevJudgeInput judgeInput(ChatClientRequest chatClientRequest, ChatClientResponse response) {
+	private JevJudgeInput judgeInput(ChatClientRequest chatClientRequest, ChatClientResponse response,
+			List<JevJudgeInput.ToolCall> recorded) {
+		// At most one of the two is non-empty for this turn: ordered before the tool loop
+		// the prompt carries no tool traffic of its own, and ordered after it the tool
+		// loop executes with its own, unwrapped, callbacks.
 		return JevJudgeInput.builder()
 			.question(getPromptQuestion(chatClientRequest))
 			.answer(getAssistantAnswer(response))
 			.toolCalls(getToolCalls(chatClientRequest))
+			.toolCalls(List.copyOf(recorded))
 			.build();
 	}
 
 	/**
+	 * Wraps the request's tool callbacks so every call made during this attempt is added
+	 * to {@code recorded}. Requests without tool callbacks pass through unchanged.
+	 */
+	private static ChatClientRequest recordingToolCalls(ChatClientRequest request,
+			List<JevJudgeInput.ToolCall> recorded) {
+		ChatOptions options = request.prompt().getOptions();
+		if (!(options instanceof ToolCallingChatOptions toolOptions) || toolOptions.getToolCallbacks() == null
+				|| toolOptions.getToolCallbacks().isEmpty()) {
+			return request;
+		}
+		List<ToolCallback> wrapped = toolOptions.getToolCallbacks()
+			.stream()
+			.map(callback -> (ToolCallback) new RecordingToolCallback(callback, recorded))
+			.toList();
+		ToolCallingChatOptions recordingOptions = toolOptions.mutate().toolCallbacks(wrapped).build();
+		return request.mutate().prompt(request.prompt().mutate().chatOptions(recordingOptions).build()).build();
+	}
+
+	/**
 	 * Flattens the system message and the conversation into the text handed to the judge
-	 * as {@code user_question}. Tool traffic is left out: it goes into {@code tool_calls}.
+	 * as {@code user_question}. Tool traffic is left out: it goes into
+	 * {@code tool_calls}.
 	 */
 	private String getPromptQuestion(ChatClientRequest chatClientRequest) {
 		String conversation = chatClientRequest.prompt()
@@ -267,16 +328,17 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 
 	/**
 	 * Pairs every tool call an assistant message made with the result its
-	 * {@link ToolResponseMessage} carried. A {@link ToolResponseMessage} carries no text at
-	 * all — its content is the tool results, which are exactly the evidence a groundedness
-	 * criterion has to be judged against — so those are unpacked rather than dropped.
+	 * {@link ToolResponseMessage} carried. A {@link ToolResponseMessage} carries no text
+	 * at all — its content is the tool results, which are exactly the evidence a
+	 * groundedness criterion has to be judged against — so those are unpacked rather than
+	 * dropped.
 	 *
 	 * <p>
-	 * Pairing is positional, not a map lookup: some providers leave the id blank and others
-	 * reuse it across turns, and keying by id would collapse such calls into one and hand
-	 * it the wrong result. Each response goes to the earliest still-open call with the same
-	 * id, or with the same tool name when the id is blank. A response that matches no call
-	 * is kept with its tool name.
+	 * Pairing is positional, not a map lookup: some providers leave the id blank and
+	 * others reuse it across turns, and keying by id would collapse such calls into one
+	 * and hand it the wrong result. Each response goes to the earliest still-open call
+	 * with the same id, or with the same tool name when the id is blank. A response that
+	 * matches no call is kept with its tool name.
 	 */
 	private static List<JevJudgeInput.ToolCall> getToolCalls(ChatClientRequest chatClientRequest) {
 		List<PendingToolCall> pending = new ArrayList<>();
@@ -295,7 +357,8 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 						match.result = toolResponse.responseData();
 					}
 					else {
-						unmatched.add(new JevJudgeInput.ToolCall(toolResponse.name(), null, toolResponse.responseData()));
+						unmatched
+							.add(new JevJudgeInput.ToolCall(toolResponse.name(), null, toolResponse.responseData()));
 					}
 				}
 			}
@@ -353,6 +416,55 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	}
 
 	/**
+	 * Delegates to a tool and records each call with its input and result.
+	 */
+	private static final class RecordingToolCallback implements ToolCallback {
+
+		private final ToolCallback delegate;
+
+		private final List<JevJudgeInput.ToolCall> recorded;
+
+		private RecordingToolCallback(ToolCallback delegate, List<JevJudgeInput.ToolCall> recorded) {
+			this.delegate = delegate;
+			this.recorded = recorded;
+		}
+
+		@Override
+		public ToolDefinition getToolDefinition() {
+			return this.delegate.getToolDefinition();
+		}
+
+		@Override
+		public ToolMetadata getToolMetadata() {
+			return this.delegate.getToolMetadata();
+		}
+
+		@Override
+		public String call(String toolInput) {
+			return record(toolInput, () -> this.delegate.call(toolInput));
+		}
+
+		@Override
+		public String call(String toolInput, @Nullable ToolContext toolContext) {
+			return record(toolInput, () -> this.delegate.call(toolInput, toolContext));
+		}
+
+		private String record(String toolInput, java.util.function.Supplier<String> call) {
+			String name = this.delegate.getToolDefinition().name();
+			try {
+				String result = call.get();
+				this.recorded.add(new JevJudgeInput.ToolCall(name, toolInput, result));
+				return result;
+			}
+			catch (RuntimeException ex) {
+				this.recorded.add(new JevJudgeInput.ToolCall(name, toolInput, "error: " + ex.getMessage()));
+				throw ex;
+			}
+		}
+
+	}
+
+	/**
 	 * @return a new builder
 	 */
 	public static Builder builder() {
@@ -366,11 +478,11 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 
 		private @Nullable JevJudge judge;
 
-		private int advisorOrder = BaseAdvisor.LOWEST_PRECEDENCE - 2000;
+		private int advisorOrder = DEFAULT_ORDER;
 
 		private int maxRepeatAttempts = 3;
 
-		private boolean failOnExhaustedAttempts;
+		private boolean failOnExhaustedAttempts = false;
 
 		private BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate = (request,
 				response) -> response.chatResponse() == null || response.chatResponse().hasToolCalls();
@@ -429,9 +541,10 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 		}
 
 		/**
-		 * What to do when the judging call itself fails. {@link JudgeErrorPolicy#FAIL_OPEN}
-		 * by default, matching the advisor's best-effort stance: a TypeSafe outage says
-		 * nothing about the answer, so it should not fail the chat call.
+		 * What to do when the judging call itself fails.
+		 * {@link JudgeErrorPolicy#FAIL_OPEN} by default, matching the advisor's
+		 * best-effort stance: a TypeSafe outage says nothing about the answer, so it
+		 * should not fail the chat call.
 		 * @param judgeErrorPolicy the policy
 		 * @return this builder
 		 */

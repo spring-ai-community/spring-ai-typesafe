@@ -16,8 +16,6 @@
 
 package org.springaicommunity.typesafe.judge;
 
-
-
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -37,9 +35,9 @@ import org.springframework.util.Assert;
  *
  * <p>
  * A criterion is either a {@link QuestionCriterion question} put to Jev or a
- * {@link CodeCriterion check} answered by plain Java. Both land as a {@link JevFinding} in the
- * same verdict, so a deterministic check fails the verdict, reaches the feedback and shows up
- * in the summary exactly like a question does.
+ * {@link CodeCriterion check} answered by plain Java. Both land as a {@link JevFinding}
+ * in the same verdict, so a deterministic check fails the verdict, reaches the feedback
+ * and shows up in the summary exactly like a question does.
  *
  * <p>
  * Prefer a check whenever the answer is already in the input: whether a tool was called,
@@ -103,7 +101,8 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 	 * A check answered in code rather than by Jev.
 	 * @param name the name the finding will carry
 	 * @param check passes when it returns {@code true}
-	 * @param defect what went wrong when it returns {@code false}, handed back as feedback
+	 * @param defect what went wrong when it returns {@code false}, handed back as
+	 * feedback
 	 * @return the criterion
 	 */
 	static CodeCriterion check(String name, Predicate<JevJudgeInput> check, String defect) {
@@ -116,25 +115,29 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 	 * <p>
 	 * The pass condition depends on the primitive, because the primitives answer
 	 * differently: a noul is thresholded on its truth value, a score on how far up the
-	 * rubric it lands, and a choice on whether the selected label is one the caller accepts.
+	 * rubric it lands, and a choice on whether the selected label is one the caller
+	 * accepts.
 	 *
 	 * @param name the name the answer will carry
 	 * @param question the question to ask
-	 * @param minimum the inclusive lower bound for a noul truth value or a score; unused for
-	 * a choice
-	 * @param acceptedOptions the labels that count as passing a choice; empty for the other
-	 * primitives
-	 * @param appliesWhen when the criterion applies; {@code null} for always. When it
-	 * returns {@code false} the question is not sent and the finding is
-	 * {@link JevFinding.Outcome#NOT_APPLICABLE}
+	 * @param minimum the inclusive lower bound for a noul truth value or a score; unused
+	 * for a choice
+	 * @param acceptedOptions the labels that count as passing a choice; empty for the
+	 * other primitives
+	 * @param appliesWhen when the criterion applies, judged on the input before the call;
+	 * {@code null} for always. When it returns {@code false} the question is not sent and
+	 * the finding is {@link JevFinding.Outcome#NOT_APPLICABLE}
+	 * @param dependsOn another criterion this one only applies after, judged on that
+	 * criterion's finding once the call has returned; {@code null} for none
 	 */
 	record QuestionCriterion(String name, Question question, double minimum, Set<String> acceptedOptions,
-			@Nullable Predicate<JevJudgeInput> appliesWhen) implements JevCriterion {
+			@Nullable Predicate<JevJudgeInput> appliesWhen, @Nullable Dependency dependsOn) implements JevCriterion {
 
 		public QuestionCriterion {
 			Assert.hasText(name, "name must not be empty");
 			Assert.notNull(question, "question must not be null");
-			// An ordered, unmodifiable copy: Set.copyOf would discard declaration order, and
+			// An ordered, unmodifiable copy: Set.copyOf would discard declaration order,
+			// and
 			// the option list is quoted back to the model in the failure feedback.
 			acceptedOptions = acceptedOptions == null ? Set.of()
 					: Collections.unmodifiableSet(new LinkedHashSet<>(acceptedOptions));
@@ -144,7 +147,7 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 		 * A criterion that always applies.
 		 */
 		public QuestionCriterion(String name, Question question, double minimum, Set<String> acceptedOptions) {
-			this(name, question, minimum, acceptedOptions, null);
+			this(name, question, minimum, acceptedOptions, null, null);
 		}
 
 		/**
@@ -160,7 +163,62 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 		 */
 		public QuestionCriterion appliesWhen(Predicate<JevJudgeInput> appliesWhen) {
 			Assert.notNull(appliesWhen, "appliesWhen must not be null");
-			return new QuestionCriterion(this.name, this.question, this.minimum, this.acceptedOptions, appliesWhen);
+			return new QuestionCriterion(this.name, this.question, this.minimum, this.acceptedOptions, appliesWhen,
+					this.dependsOn);
+		}
+
+		/**
+		 * Returns a copy that only applies when another criterion passed. The question is
+		 * still asked — it rides in the same call — but when {@code criterion} did not
+		 * pass, this finding is {@link JevFinding.Outcome#NOT_APPLICABLE} rather than
+		 * judged.
+		 * @param criterion the name of a criterion declared earlier in the judge
+		 * @return the copy
+		 */
+		public QuestionCriterion whenPassed(String criterion) {
+			return new QuestionCriterion(this.name, this.question, this.minimum, this.acceptedOptions, this.appliesWhen,
+					new Dependency(criterion, Set.of()));
+		}
+
+		/**
+		 * Returns a copy that only applies when a choice criterion selected one of
+		 * {@code labels}. This is how a rubric branches:
+		 *
+		 * <pre>{@code
+		 * .choice("mode", modeChoice, "answered", "clarification_needed")
+		 * .criterion(JevCriterion.noul("has_details", detailsNoul, 0.7d)
+		 *     .whenChosen("mode", "answered"))
+		 * }</pre>
+		 *
+		 * Every question is still answered in the one call, so the branch costs nothing;
+		 * when the choice lands elsewhere, or is not decided, this finding is
+		 * {@link JevFinding.Outcome#NOT_APPLICABLE}.
+		 * @param choiceCriterion the name of a choice criterion declared earlier in the
+		 * judge
+		 * @param labels the options that make this criterion apply
+		 * @return the copy
+		 */
+		public QuestionCriterion whenChosen(String choiceCriterion, String... labels) {
+			Assert.notEmpty(labels, "labels must name at least one option");
+			Assert.noNullElements(labels, "labels must not contain null");
+			return new QuestionCriterion(this.name, this.question, this.minimum, this.acceptedOptions, this.appliesWhen,
+					new Dependency(choiceCriterion, new LinkedHashSet<>(Arrays.asList(labels))));
+		}
+
+	}
+
+	/**
+	 * What one criterion needs from another before it applies.
+	 *
+	 * @param criterion the name of the criterion depended on
+	 * @param chosen the labels that criterion's choice must have selected; empty to
+	 * require only that it passed
+	 */
+	record Dependency(String criterion, Set<String> chosen) {
+
+		public Dependency {
+			Assert.hasText(criterion, "criterion must not be empty");
+			chosen = chosen == null ? Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(chosen));
 		}
 
 	}
@@ -170,13 +228,14 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 	 * service, costs nothing and answers the same way every time.
 	 *
 	 * <p>
-	 * An exception thrown by the check is a bug in the check, not a verdict on the answer,
-	 * so it propagates out of {@link JevJudge#judge} rather than being reported as a
-	 * failure.
+	 * An exception thrown by the check is a bug in the check, not a verdict on the
+	 * answer, so it propagates out of {@link JevJudge#judge} rather than being reported
+	 * as a failure.
 	 *
 	 * @param name the name the finding will carry
 	 * @param check passes when it returns {@code true}
-	 * @param defect what went wrong when it returns {@code false}, handed back as feedback
+	 * @param defect what went wrong when it returns {@code false}, handed back as
+	 * feedback
 	 */
 	record CodeCriterion(String name, Predicate<JevJudgeInput> check, String defect) implements JevCriterion {
 

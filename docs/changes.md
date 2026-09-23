@@ -3,9 +3,11 @@
 ## 0.2.0 (unreleased)
 
 0.2.0 expands the [Model-as-a-Judge](judge/JevJudge.md) API: code checks alongside Jev
-questions, a typed judge input, outcomes that say *why* a criterion was not decided,
-confidence gating on the verdict rather than the distribution, and a choice of what the
-self-refine advisor does when judging itself fails. It has a few breaking changes, each listed below with its fix. Most
+questions, a typed judge input, criteria that depend on other answers, outcomes that say
+*why* a criterion was not decided, and confidence gating on the verdict rather than the
+distribution. The self-refine advisor now re-runs tools on a retry while still showing the
+judge every tool call, returns its best attempt, and lets you choose what happens when
+judging itself fails. It has a few breaking changes, each listed below with its fix. Most
 upgrades need a recompile and at most a type rename.
 
 ### At a glance
@@ -16,6 +18,9 @@ upgrades need a recompile and at most a type rename.
 | `JevJudge` | [Typed input](#typed-judge-input) via `JevJudgeInput` and `judge(JevJudgeInput)` | no |
 | `JevSelfRefineAdvisor` | [`judgeErrorPolicy`](#judge-error-policy-for-the-self-refine-advisor) | no |
 | `JevJudge` | [`appliesWhen`, `failOnError`, `failFast`](#conditional-criteria-error-policy-and-fail-fast) | no |
+| `JevJudge` | [criteria that depend on other answers: `whenChosen`, `whenPassed`](#criteria-that-depend-on-other-answers) | no |
+| `JevSelfRefineAdvisor` | [records tool calls; default order `LOWEST_PRECEDENCE - 2000` → `HIGHEST_PRECEDENCE + 250`](#the-self-refine-advisor-moved-before-the-tool-loop) | **behaviour** |
+| `JevSelfRefineAdvisor` | [returns the best attempt, not the last](#the-best-attempt-is-returned-not-the-last) | **behaviour** |
 | `JevFinding.Outcome` | [new `ERROR` and `NOT_APPLICABLE` values](#outcome-has-two-new-values) | **source** (exhaustive `switch`) |
 | `JevJudge` | [a missing answer is `ERROR`, not `INCONCLUSIVE`](#a-missing-answer-is-error-not-inconclusive) | **behaviour** |
 | `JevJudge` | [`minConfidence` gates on verdict support; default 0.5 → 0.6](#minconfidence-now-gates-on-how-much-probability-supports-the-verdict) | **behaviour** |
@@ -91,6 +96,14 @@ See [When judging fails](judge/JevSelfRefineAdvisor.md#when-judging-fails).
   are `NOT_APPLICABLE`. The verdict already fails, so the call would be wasted.
 
 See [Reading the verdict](judge/JevJudge.md#reading-the-verdict).
+
+#### Criteria that depend on other answers
+
+`JevCriterion.noul/score/choice(...).whenChosen("mode", "answered")` applies a question only
+when a choice selected one of the given labels. `whenPassed("name")` applies it only when
+another criterion passed. The question is still asked in the same call, so the branch costs
+nothing. When the dependency isn't met, the finding is `NOT_APPLICABLE`. See
+[Criteria that depend on other answers](judge/JevJudge.md#criteria-that-depend-on-other-answers).
 
 ---
 
@@ -233,6 +246,36 @@ JevSelfRefineAdvisor.builder()
 
 Exceptions thrown by a code check are not covered by the policy and always propagate.
 
+#### The self-refine advisor moved before the tool loop
+
+`JevSelfRefineAdvisor`'s default order changed from `LOWEST_PRECEDENCE - 2000` to
+`DEFAULT_ORDER = HIGHEST_PRECEDENCE + 250`. That's after chat memory (`+200`) and before
+Spring AI's tool loop (`+300`). From there:
+
+- **A retry re-runs the tools.** Ordered after the tool loop, a retry only re-asked the model
+  with the same tool history, and in live runs the model never recovered from a bad tool
+  result.
+- **The judge still sees `tool_calls`.** The advisor wraps the request's tool callbacks for
+  each attempt and records every call and result. Tools resolved by name through a
+  `ToolCallbackResolver` are not recorded.
+- **Rejected attempts no longer reach chat memory**, which now sits outside the retry loop.
+
+**Affected:** applications that relied on the advisor running inside the tool loop, or on its
+position relative to their own advisors. [`JevGuardrailAdvisor`](guardrails/JevGuardrailAdvisor.md)
+is unaffected: at `LOWEST_PRECEDENCE - 1000` it was already inside the self-refine loop.
+
+**Migrate:** restore the 0.1.0 placement with
+`.order(BaseAdvisor.LOWEST_PRECEDENCE - 2000)`. The judge then reads tool calls from the
+prompt, and a retry does not re-run the tools.
+
+#### The best attempt is returned, not the last
+
+Once `maxRepeatAttempts` is exhausted, the advisor used to return the last attempt. It now
+returns the attempt with the fewest failed criteria, the later one on a tie.
+`JevSelfRefineFailedException.verdict()` carries that attempt's verdict.
+
+**Affected:** only callers who relied on getting the final attempt when every attempt fails.
+
 #### `supporting_context` is an array
 
 `JevEvaluator` used to send the retrieved documents as one string joined with line
@@ -273,3 +316,5 @@ you have scripted.
 7. Relying on `INCONCLUSIVE` for missing answers, or on `minConfidence(0.5d)`? See
    [the confidence change](#minconfidence-now-gates-on-how-much-probability-supports-the-verdict)
    and set `failOnError(true)` where outages must block.
+8. Ordered other advisors around `JevSelfRefineAdvisor`'s old default? See
+   [the new default order](#the-self-refine-advisor-moved-before-the-tool-loop).

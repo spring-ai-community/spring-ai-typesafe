@@ -31,7 +31,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
-import org.springframework.core.Ordered;
 
 /**
  * Model-as-a-judge with Jev doing the judging.
@@ -59,15 +58,13 @@ public class ModelJudgeDemoApplication {
 	CommandLineRunner cli(ChatModel chatModel, TypeSafeClient typeSafeClient) {
 		return args -> {
 			// @formatter:off
-			// Ordered before the tool-calling advisor (HIGHEST_PRECEDENCE + 300) on purpose:
-			// a rejected answer is best fixed by calling the weather tool again, and only
-			// from out here does a retry re-run the tool loop. The price is that the judge
-			// does not see `tool_calls`; see the advisor docs for the trade-off.
+			// The advisor's default order sits before the tool loop, so a rejected answer
+			// is retried with a fresh call to the weather tool, and the tool calls of each
+			// attempt are recorded for the judge as `tool_calls`.
 			ChatClient chatClient = ChatClient.builder(chatModel)
 					.defaultTools(new WeatherTools())
 					.defaultAdvisors(JevSelfRefineAdvisor.builder()
-							.order(Ordered.HIGHEST_PRECEDENCE + 100)
-							.judge(WeatherJudge.create(typeSafeClient))
+							.judge(createWeatherJudge(typeSafeClient))
 							.maxRepeatAttempts(10)
 							.build())
 					.build();
@@ -86,7 +83,7 @@ public class ModelJudgeDemoApplication {
 	 */
 	static class WeatherTools {
 
-		private static final int[] TEMPERATURES = { -125, 15 };
+		private static final int[] TEMPERATURES = { -125, -255, 15 };
 
 		private final Random random = new Random();
 
@@ -111,48 +108,44 @@ public class ModelJudgeDemoApplication {
 	 * {@code is_plausible} alone, and the feedback says exactly that instead of averaging
 	 * the problem away into a middling score.
 	 */
-	final class WeatherJudge {
-
-		private WeatherJudge() {
-		}
-
-		static JevJudge create(TypeSafeClient typeSafeClient) {
-			return JevJudge.builder(typeSafeClient)
-				.score("helpfulness",
-						Score.builder()
-							.instructions("How well does `assistant_answer` address the question in `user_question`?")
-							.level("Terrible: irrelevant to the question, or almost entirely missing")
-							.level("Mostly unhelpful: misses key aspects of the question")
-							.level("Mostly helpful: answers the question but could be improved")
-							.level("Excellent: relevant, direct and addresses every concern raised")
-							.build(),
-						2.0d)
-				.noul("is_plausible", Noul.builder()
-					.instructions(
-							"Are all the numeric values in `assistant_answer` physically plausible for their units?")
-					.whenTrue("Every value is within a range that can actually occur")
-					.whenFalse("At least one value is impossible, such as a temperature below absolute zero "
-							+ "or far outside anything ever recorded on Earth")
-					.build(), 0.7d)
-				.noul("is_grounded",
-						Noul.builder()
-							.instructions(Map.of("question",
-									"Does `assistant_answer` stay within what `user_question` asked, without asserting "
-											+ "unrelated facts?",
-									"note",
-									"The assistant has a weather tool, so specific weather values for the place asked "
-											+ "about are expected and are not themselves unsupported."))
-							.whenTrue("Answers the question asked, adding no unrelated factual claims")
-							.whenFalse("Introduces facts that appear nowhere in the question")
-							.build(),
-						0.5d)
-				// minConfidence keeps its default: a clear majority (60%) of a score's
-				// probability must support the verdict. Below that the rubric did not
-				// settle pass or fail for this answer, which is reported as undecided
-				// rather than as a failure.
-				.build();
-		}
-
+	static JevJudge createWeatherJudge(TypeSafeClient typeSafeClient) {
+		return JevJudge.builder(typeSafeClient)
+			.score("helpfulness",
+					Score.builder()
+						.instructions("How well does `assistant_answer` address the question in `user_question`?")
+						.level("Terrible: irrelevant to the question, or almost entirely missing")
+						.level("Mostly unhelpful: misses key aspects of the question")
+						.level("Mostly helpful: answers the question but could be improved")
+						.level("Excellent: relevant, direct and addresses every concern raised")
+						.build(),
+					2.0d)
+			.noul("is_plausible", Noul.builder()
+				.instructions("Are all the numeric values in `assistant_answer` physically plausible for their units?")
+				.whenTrue("Every value is within a range that can actually occur")
+				.whenFalse("At least one value is impossible, such as a temperature below absolute zero "
+						+ "or far outside anything ever recorded on Earth")
+				.build(), 0.7d)
+			.noul("is_grounded",
+					Noul.builder()
+						.instructions(Map.of("question",
+								"Does `assistant_answer` stay within what `user_question` asked, without asserting "
+										+ "unrelated facts?",
+								"note",
+								"The assistant has a weather tool, so specific weather values for the place asked "
+										+ "about are expected and are not themselves unsupported."))
+						.whenTrue("Answers the question asked, adding no unrelated factual claims")
+						.whenFalse("Introduces facts that appear nowhere in the question")
+						.build(),
+					0.5d)
+			// Whether the tool was called at all is in the input already, so it is a
+			// code check rather than a question: exact, free and never sent to Jev.
+			.check("used_weather_tool", input -> !input.toolCalls().isEmpty(),
+					"answered without calling the weather tool")
+			// minConfidence keeps its default: a clear majority (60%) of a score's
+			// probability must support the verdict. Below that the rubric did not
+			// settle pass or fail for this answer, which is reported as undecided
+			// rather than as a failure.
+			.build();
 	}
 
 }

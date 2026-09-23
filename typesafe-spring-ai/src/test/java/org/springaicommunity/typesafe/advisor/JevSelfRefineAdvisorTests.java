@@ -31,10 +31,14 @@ import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.test.web.client.ExpectedCount;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,6 +79,14 @@ class JevSelfRefineAdvisorTests {
 			  "helpfulness":{"type":"score","score":3.0,
 			    "legend":{"0":"Terrible","1":"Unhelpful","2":"Helpful","3":"Excellent"},
 			    "probabilities":{"3":1.0},"confidence":0.9},
+			  "is_plausible":{"type":"noul","noul":0.03}
+			},"usage":{"input_tokens":100,"output_tokens":10}}""";
+
+	private static final String FAILING_BOTH = """
+			{"model":"jev-1.13.0","answers":{
+			  "helpfulness":{"type":"score","score":0.4,
+			    "legend":{"0":"Terrible","1":"Unhelpful","2":"Helpful","3":"Excellent"},
+			    "probabilities":{"0":1.0},"confidence":0.9},
 			  "is_plausible":{"type":"noul","noul":0.03}
 			},"usage":{"input_tokens":100,"output_tokens":10}}""";
 
@@ -335,6 +347,148 @@ class JevSelfRefineAdvisorTests {
 			.content();
 
 		this.mock.server().verify();
+	}
+
+	@Test
+	void returnsTheBestAttemptRatherThanTheLastOnceAttemptsAreExhausted() {
+		// A later attempt is not necessarily a better one: attempt 2 fails one criterion,
+		// attempt 3 regresses to failing two.
+		expectEvaluation(FAILING_BOTH);
+		expectEvaluation(FAILING);
+		expectEvaluation(FAILING_BOTH);
+		ScriptedChatModel chatModel = new ScriptedChatModel("first", "second", "third");
+
+		String content = chatClient(chatModel, 2).prompt("What is the weather in Paris?").call().content();
+
+		assertThat(content).isEqualTo("second");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void failsWithTheVerdictOfTheBestAttempt() {
+		expectEvaluation(FAILING_BOTH);
+		expectEvaluation(FAILING);
+		expectEvaluation(FAILING_BOTH);
+
+		ChatClient chatClient = ChatClient.builder(new ScriptedChatModel("first", "second", "third"))
+			.defaultAdvisors(JevSelfRefineAdvisor.builder()
+				.judge(judge())
+				.maxRepeatAttempts(2)
+				.failOnExhaustedAttempts(true)
+				.build())
+			.build();
+
+		assertThatExceptionOfType(JevSelfRefineFailedException.class)
+			.isThrownBy(() -> chatClient.prompt("What is the weather in Paris?").call().content())
+			.satisfies(ex -> assertThat(ex.verdict().failures()).singleElement()
+				.satisfies(finding -> assertThat(finding.name()).isEqualTo("is_plausible")));
+	}
+
+	@Test
+	void recordsTheToolCallsItsAttemptMadeAtTheDefaultOrder() {
+		// Ordered before the tool loop, the tool traffic never reaches this advisor's
+		// prompt; it is recorded from the wrapped callbacks instead.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.tool_calls[0].name").value("weather"))
+			.andExpect(jsonPath("$.state.tool_calls[0].arguments").value(org.hamcrest.Matchers.containsString("Paris")))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value(org.hamcrest.Matchers.containsString("15 degrees")))
+			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
+		WeatherTool tool = new WeatherTool("15 degrees Celsius");
+
+		String content = ChatClient
+			.builder(new ScriptedChatModel(ScriptedChatModel.toolCall("weather", "{\"city\":\"Paris\"}"),
+					"It is 15 degrees Celsius in Paris."))
+			.defaultTools(tool)
+			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge()).build())
+			.build()
+			.prompt("What is the weather in Paris?")
+			.call()
+			.content();
+
+		assertThat(content).isEqualTo("It is 15 degrees Celsius in Paris.");
+		assertThat(tool.calls()).isEqualTo(1);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void reRunsTheToolsOnARetry() {
+		// The point of sitting before the tool loop: a tool that returned something wrong
+		// is asked again, and each attempt is judged against its own tool calls.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.tool_calls.length()").value(1))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value(org.hamcrest.Matchers.containsString("-125")))
+			.andRespond(MockTypeSafeServer.jsonResponse(FAILING));
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.tool_calls.length()").value(1))
+			.andExpect(jsonPath("$.state.tool_calls[0].result").value(org.hamcrest.Matchers.containsString("15")))
+			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
+		WeatherTool tool = new WeatherTool("-125 degrees Celsius", "15 degrees Celsius");
+
+		String content = ChatClient
+			.builder(new ScriptedChatModel(ScriptedChatModel.toolCall("weather", "{\"city\":\"Paris\"}"),
+					"It is -125 degrees Celsius in Paris.", ScriptedChatModel.toolCall("weather", "{\"city\":\"Paris\"}"),
+					"It is 15 degrees Celsius in Paris."))
+			.defaultTools(tool)
+			.defaultAdvisors(JevSelfRefineAdvisor.builder().judge(judge()).maxRepeatAttempts(3).build())
+			.build()
+			.prompt("What is the weather in Paris?")
+			.call()
+			.content();
+
+		assertThat(content).isEqualTo("It is 15 degrees Celsius in Paris.");
+		assertThat(tool.calls()).isEqualTo(2);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void leavesRejectedAttemptsOutOfChatMemory() {
+		// Chat memory sits outside this advisor at its default order, so only the answer
+		// finally returned is remembered.
+		expectEvaluation(FAILING);
+		expectEvaluation(PASSING);
+		ChatMemory memory = MessageWindowChatMemory.builder().build();
+
+		ChatClient.builder(new ScriptedChatModel("It is -125 degrees Celsius in Paris.",
+				"It is 15 degrees Celsius in Paris."))
+			.defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build(),
+					JevSelfRefineAdvisor.builder().judge(judge()).build())
+			.build()
+			.prompt("What is the weather in Paris?")
+			.advisors(advisor -> advisor.param(ChatMemory.CONVERSATION_ID, "c1"))
+			.call()
+			.content();
+
+		assertThat(memory.get("c1")).extracting(org.springframework.ai.chat.messages.Message::getText)
+			.containsExactly("What is the weather in Paris?", "It is 15 degrees Celsius in Paris.");
+		this.mock.server().verify();
+	}
+
+	/**
+	 * A weather tool that returns its scripted results in turn and counts its calls.
+	 */
+	static class WeatherTool {
+
+		private final java.util.Deque<String> results;
+
+		private int calls;
+
+		WeatherTool(String... results) {
+			this.results = new java.util.ArrayDeque<>(List.of(results));
+		}
+
+		@Tool(description = "Get the current weather for a city")
+		String weather(String city) {
+			this.calls++;
+			return this.results.size() > 1 ? this.results.poll() : this.results.peek();
+		}
+
+		int calls() {
+			return this.calls;
+		}
+
 	}
 
 	@Test
