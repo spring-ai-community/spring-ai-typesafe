@@ -74,14 +74,14 @@ does not do RAG or tool search never sees those classes and never pays for the d
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-starter-typesafe</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
 </dependency>
 
 <!-- For the judge, advisors and Spring AI integrations -->
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>typesafe-spring-ai</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -94,7 +94,7 @@ Plain Java without Spring Boot needs only `typesafe-java-sdk`.
             <dependency>
                 <groupId>org.springaicommunity</groupId>
                 <artifactId>typesafe-bom</artifactId>
-                <version>0.1.0-SNAPSHOT</version>
+                <version>0.3.0-SNAPSHOT</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

@@ -1,6 +1,6 @@
 # Changes
 
-## 0.2.0 (unreleased)
+## 0.2.0 
 
 A stronger [Model-as-a-judge](judge/JevJudge.md) API, a sturdier self-refine advisor, and an
 experimental [`JevChatModel`](chat/JevChatModel.md). Most upgrades need a recompile and at

@@ -57,14 +57,14 @@ The three primitives — `Noul`, `Choice` and `Score` — are described in
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-starter-typesafe</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
 </dependency>
 
 <!-- For the judge, advisors and Spring AI integrations -->
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>typesafe-spring-ai</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
 </dependency>
 ```
 
