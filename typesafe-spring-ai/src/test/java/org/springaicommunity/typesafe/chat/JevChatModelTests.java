@@ -18,10 +18,18 @@ package org.springaicommunity.typesafe.chat;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+import io.micrometer.common.KeyValue;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
+import io.micrometer.observation.ObservationRegistry;
 
 import org.junit.jupiter.api.Test;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.MockTypeSafeServer;
+import org.springaicommunity.typesafe.exception.TypeSafeException;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
@@ -31,6 +39,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.observation.ChatModelMeterObservationHandler;
+import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
@@ -39,6 +49,7 @@ import org.springframework.ai.tool.function.FunctionToolCallback;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 
@@ -192,6 +203,84 @@ class JevChatModelTests {
 			.withoutFormatInstructions("Classify this.\n" + JevChatModel.FORMAT_INSTRUCTIONS_START + "\nschema..."))
 			.isEqualTo("Classify this.");
 		assertThat(JevChatModel.withoutFormatInstructions("No instructions here.")).isEqualTo("No instructions here.");
+	}
+
+	@Test
+	void observesEachCallAsAGenAiClientOperation() {
+		respondWith(TRIAGE_RESPONSE);
+		List<Observation.Context> stopped = new CopyOnWriteArrayList<>();
+		ObservationRegistry registry = ObservationRegistry.create();
+		registry.observationConfig().observationHandler(new ObservationHandler<>() {
+			@Override
+			public boolean supportsContext(Observation.Context context) {
+				return true;
+			}
+
+			@Override
+			public void onStop(Observation.Context context) {
+				stopped.add(context);
+			}
+		});
+
+		observedModel(registry).call(new Prompt(TICKET, ChatOptions.builder().model("jev-latest").build()));
+
+		assertThat(stopped).singleElement().satisfies(context -> {
+			assertThat(context).isInstanceOf(ChatModelObservationContext.class);
+			assertThat(context.getName()).isEqualTo("gen_ai.client.operation");
+			assertThat(context.getContextualName()).isEqualTo("chat jev-latest");
+			assertThat(context.getLowCardinalityKeyValues()).extracting(KeyValue::getKey, KeyValue::getValue)
+				.contains(tuple("gen_ai.operation.name", "chat"), tuple("gen_ai.system", JevChatModel.PROVIDER),
+						tuple("gen_ai.request.model", "jev-latest"), tuple("gen_ai.response.model", "jev-1.13.0"));
+			assertThat(context.getHighCardinalityKeyValues()).extracting(KeyValue::getKey, KeyValue::getValue)
+				.contains(tuple("gen_ai.response.id", "req_0123456789"), tuple("gen_ai.usage.input_tokens", "210"),
+						tuple("gen_ai.usage.output_tokens", "18"));
+		});
+	}
+
+	@Test
+	void recordsTokenUsageThroughTheStandardMeterHandler() {
+		respondWith(TRIAGE_RESPONSE);
+		SimpleMeterRegistry meters = new SimpleMeterRegistry();
+		ObservationRegistry registry = ObservationRegistry.create();
+		registry.observationConfig().observationHandler(new ChatModelMeterObservationHandler(meters));
+
+		observedModel(registry).call(new Prompt(TICKET));
+
+		assertThat(meters.get("gen_ai.client.token.usage").tag("gen_ai.token.type", "input").counter().count())
+			.isEqualTo(210.0d);
+		assertThat(meters.get("gen_ai.client.token.usage").tag("gen_ai.token.type", "output").counter().count())
+			.isEqualTo(18.0d);
+	}
+
+	@Test
+	void recordsAFailedCallAsAnErroredObservation() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.errorResponse(422, "malformed question"));
+		List<Observation.Context> stopped = new CopyOnWriteArrayList<>();
+		ObservationRegistry registry = ObservationRegistry.create();
+		registry.observationConfig().observationHandler(new ObservationHandler<>() {
+			@Override
+			public boolean supportsContext(Observation.Context context) {
+				return true;
+			}
+
+			@Override
+			public void onStop(Observation.Context context) {
+				stopped.add(context);
+			}
+		});
+
+		assertThatExceptionOfType(TypeSafeException.class)
+			.isThrownBy(() -> observedModel(registry).call(new Prompt(TICKET)));
+		assertThat(stopped).singleElement().satisfies(context -> assertThat(context.getError()).isNotNull());
+	}
+
+	private JevChatModel observedModel(ObservationRegistry registry) {
+		return JevChatModel.builder(this.mock.client())
+			.questions(triageModel().questions())
+			.observationRegistry(registry)
+			.build();
 	}
 
 	@Test

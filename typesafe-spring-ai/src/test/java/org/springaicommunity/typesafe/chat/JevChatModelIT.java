@@ -16,6 +16,8 @@
 
 package org.springaicommunity.typesafe.chat;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springaicommunity.typesafe.TypeSafeClient;
@@ -26,6 +28,7 @@ import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.observation.ChatModelMeterObservationHandler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -86,6 +89,26 @@ class JevChatModelIT {
 		assertThat(triage.team()).isEqualTo("billing");
 		assertThat(triage.urgent()).isLessThan(0.5d);
 		assertThat(triage.severity()).isLessThan(1.0d);
+	}
+
+	@Test
+	void reportsRealTokenUsageOnTheStandardMeter() {
+		SimpleMeterRegistry meters = new SimpleMeterRegistry();
+		ObservationRegistry registry = ObservationRegistry.create();
+		registry.observationConfig().observationHandler(new ChatModelMeterObservationHandler(meters));
+		JevChatModel observed = JevChatModel
+			.builder(TypeSafeClient.builder()
+				.baseUrl(TypeSafeConstants.DEFAULT_BASE_URL)
+				.defaultModel(TypeSafeModels.JEV_LATEST)
+				.build())
+			.question("urgent", Noul.of("Does the user's ticket need attention right now?"))
+			.observationRegistry(registry)
+			.build();
+
+		ChatClient.create(observed).prompt().user("Production is down; every customer gets HTTP 500.").call().content();
+
+		assertThat(meters.get("gen_ai.client.token.usage").tag("gen_ai.token.type", "input").counter().count())
+			.isPositive();
 	}
 
 }

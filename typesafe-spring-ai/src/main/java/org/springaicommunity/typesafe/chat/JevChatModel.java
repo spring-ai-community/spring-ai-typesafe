@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import io.micrometer.observation.ObservationRegistry;
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.TypeSafeClient;
@@ -44,6 +45,10 @@ import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.observation.ChatModelObservationContext;
+import org.springframework.ai.chat.observation.ChatModelObservationConvention;
+import org.springframework.ai.chat.observation.ChatModelObservationDocumentation;
+import org.springframework.ai.chat.observation.DefaultChatModelObservationConvention;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
@@ -81,9 +86,20 @@ import org.springframework.util.StringUtils;
  * prompt that carries tool callbacks directly is rejected. Memory or retrieval advisors
  * do work, but only as a way to put more text into the state.
  *
+ * <p>
+ * Each call is observed like any other Spring AI chat model: a
+ * {@code gen_ai.client.operation} observation with provider {@value #PROVIDER}, the
+ * requested and returned model, the response id and the token usage, so the standard
+ * {@code ChatModelMeterObservationHandler} records {@code gen_ai.client.token.usage}. Pass
+ * an {@link ObservationRegistry} to the builder to enable it; the SDK's retries happen
+ * inside the one observation.
+ *
  * @author Christian Tzolov
  */
 public final class JevChatModel implements ChatModel {
+
+	/** The provider name reported on observations; Spring AI has no constant for it. */
+	public static final String PROVIDER = "typesafe";
 
 	/** Generation metadata key holding the full {@link SystemOneResponse}. */
 	public static final String RESPONSE_METADATA_KEY = "jevResponse";
@@ -103,6 +119,8 @@ public final class JevChatModel implements ChatModel {
 
 	private static final JsonMapper JSON = JsonMapper.builder().build();
 
+	private static final ChatModelObservationConvention DEFAULT_OBSERVATION_CONVENTION = new DefaultChatModelObservationConvention();
+
 	private final TypeSafeClient typeSafeClient;
 
 	private final Map<String, Question> questions;
@@ -111,12 +129,19 @@ public final class JevChatModel implements ChatModel {
 
 	private final Function<SystemOneResponse, String> answerRenderer;
 
+	private final ObservationRegistry observationRegistry;
+
+	private final @Nullable ChatModelObservationConvention observationConvention;
+
 	private JevChatModel(TypeSafeClient typeSafeClient, Map<String, Question> questions,
-			Function<Prompt, JsonContent> stateConverter, Function<SystemOneResponse, String> answerRenderer) {
+			Function<Prompt, JsonContent> stateConverter, Function<SystemOneResponse, String> answerRenderer,
+			ObservationRegistry observationRegistry, @Nullable ChatModelObservationConvention observationConvention) {
 		this.typeSafeClient = typeSafeClient;
 		this.questions = questions;
 		this.stateConverter = stateConverter;
 		this.answerRenderer = answerRenderer;
+		this.observationRegistry = observationRegistry;
+		this.observationConvention = observationConvention;
 	}
 
 	@Override
@@ -124,6 +149,23 @@ public final class JevChatModel implements ChatModel {
 		Assert.notNull(prompt, "prompt must not be null");
 		rejectTools(prompt.getOptions());
 
+		ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
+			.prompt(prompt)
+			.provider(PROVIDER)
+			.build();
+		ChatResponse chatResponse = ChatModelObservationDocumentation.CHAT_MODEL_OPERATION
+			.observation(this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
+					this.observationRegistry)
+			.observe(() -> {
+				ChatResponse response = classify(prompt);
+				observationContext.setResponse(response);
+				return response;
+			});
+		Assert.state(chatResponse != null, "the observed call returned no response");
+		return chatResponse;
+	}
+
+	private ChatResponse classify(Prompt prompt) {
 		SystemOneResponse response = this.typeSafeClient.systemOne(SystemOneRequest.builder()
 			.state(this.stateConverter.apply(prompt))
 			.model(modelOf(prompt.getOptions()))
@@ -264,6 +306,10 @@ public final class JevChatModel implements ChatModel {
 
 		private Function<SystemOneResponse, String> answerRenderer = JevChatModel::answersAsJson;
 
+		private ObservationRegistry observationRegistry = ObservationRegistry.NOOP;
+
+		private @Nullable ChatModelObservationConvention observationConvention;
+
 		private Builder(TypeSafeClient typeSafeClient) {
 			Assert.notNull(typeSafeClient, "typeSafeClient must not be null");
 			this.typeSafeClient = typeSafeClient;
@@ -318,11 +364,34 @@ public final class JevChatModel implements ChatModel {
 			return this;
 		}
 
+		/**
+		 * Observes each call as a {@code gen_ai.client.operation}. Not observed by default.
+		 * @param observationRegistry the registry
+		 * @return this builder
+		 */
+		public Builder observationRegistry(ObservationRegistry observationRegistry) {
+			Assert.notNull(observationRegistry, "observationRegistry must not be null");
+			this.observationRegistry = observationRegistry;
+			return this;
+		}
+
+		/**
+		 * Replaces the observation convention, for example to add Jev-specific key values.
+		 * @param observationConvention the convention; Spring AI's
+		 * {@link DefaultChatModelObservationConvention} by default
+		 * @return this builder
+		 */
+		public Builder observationConvention(ChatModelObservationConvention observationConvention) {
+			Assert.notNull(observationConvention, "observationConvention must not be null");
+			this.observationConvention = observationConvention;
+			return this;
+		}
+
 		public JevChatModel build() {
 			Assert.notEmpty(this.questions, "a JevChatModel must declare at least one question");
 			return new JevChatModel(this.typeSafeClient,
 					java.util.Collections.unmodifiableMap(new LinkedHashMap<>(this.questions)), this.stateConverter,
-					this.answerRenderer);
+					this.answerRenderer, this.observationRegistry, this.observationConvention);
 		}
 
 	}
