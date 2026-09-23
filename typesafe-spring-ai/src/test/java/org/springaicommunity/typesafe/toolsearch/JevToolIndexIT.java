@@ -51,7 +51,6 @@ class JevToolIndexIT {
 	private static final String SESSION = "it-session";
 
 	private final TypeSafeClient client = TypeSafeClient.builder()
-		.baseUrl(TypeSafeConstants.DEFAULT_BASE_URL)
 		.defaultModel(TypeSafeModels.JEV_LATEST)
 		.build();
 

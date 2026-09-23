@@ -46,7 +46,6 @@ class JevChatModelIT {
 
 	private final ChatClient chatClient = ChatClient.create(JevChatModel
 		.builder(TypeSafeClient.builder()
-			.baseUrl(TypeSafeConstants.DEFAULT_BASE_URL)
 			.defaultModel(TypeSafeModels.JEV_LATEST)
 			.build())
 		.question("team",
@@ -109,7 +108,6 @@ class JevChatModelIT {
 		registry.observationConfig().observationHandler(new ChatModelMeterObservationHandler(meters));
 		JevChatModel observed = JevChatModel
 			.builder(TypeSafeClient.builder()
-				.baseUrl(TypeSafeConstants.DEFAULT_BASE_URL)
 				.defaultModel(TypeSafeModels.JEV_LATEST)
 				.build())
 			.question("urgent", Noul.of("Does the user's ticket need attention right now?"))

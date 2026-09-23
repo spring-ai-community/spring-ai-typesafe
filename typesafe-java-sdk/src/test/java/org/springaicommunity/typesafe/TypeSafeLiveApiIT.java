@@ -56,7 +56,6 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 class TypeSafeLiveApiIT {
 
 	private final TypeSafeClient client = TypeSafeClient.builder()
-		.baseUrl(TypeSafeConstants.DEFAULT_BASE_URL)
 		.defaultModel(TypeSafeModels.JEV_LATEST)
 		.build();
 
@@ -124,7 +123,6 @@ class TypeSafeLiveApiIT {
 	void mapsARejectedKeyOntoAnAuthenticationException() {
 		TypeSafeClient badKey = TypeSafeClient.builder()
 			.apiKey("sk-not-a-real-key")
-			.baseUrl(TypeSafeConstants.DEFAULT_BASE_URL)
 			.defaultModel(TypeSafeModels.JEV_LATEST)
 			.retryPolicy(RetryPolicy.noRetry())
 			.build();
