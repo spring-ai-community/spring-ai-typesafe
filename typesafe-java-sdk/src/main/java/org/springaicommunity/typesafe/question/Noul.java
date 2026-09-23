@@ -153,9 +153,10 @@ public record Noul(@JsonProperty("instructions") @Nullable JsonContent instructi
 		}
 
 		public Noul build() {
-			// The API documents instructions as required for a noul; fail here rather than
-			// as a 422 on the wire, the way the Choice and Score builders already do.
-			Assert.notNull(this.instructions, "instructions must be set");
+			// The API rejects a noul with neither instructions nor criteria; fail here
+			// rather than as a 400 on the wire.
+			Assert.isTrue(this.instructions != null || this.whenTrue != null || this.whenFalse != null,
+					"a noul needs instructions or criteria (whenTrue/whenFalse)");
 			NoulCriteria criteria = (this.whenTrue == null && this.whenFalse == null) ? null
 					: new NoulCriteria(this.whenTrue, this.whenFalse);
 			return new Noul(this.instructions, criteria);
