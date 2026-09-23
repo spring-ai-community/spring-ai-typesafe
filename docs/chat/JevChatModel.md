@@ -57,6 +57,34 @@ Name each question after the record component its answer should land in.
 
 ## Structured output
 
+`ChatClient.entity(...)` asks for JSON in one of two ways, and the difference decides what Jev
+sees and what is checked before the call:
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant CC as ChatClient
+    participant Adv as ChatModelCallAdvisor
+    participant Jev as JevChatModel
+    participant API as TypeSafeClient<br/>POST /v1/systemone
+
+    App->>CC: entity(Triage.class, spec)
+    alt native: spec.useProviderStructuredOutput()
+        CC->>Adv: record's JSON schema
+        Adv->>Jev: call(prompt) with the schema in the options
+        Jev->>Jev: check the schema against the questions<br/>(a mismatch fails here, before any Jev call)
+    else prompt-based: plain entity(Triage.class)
+        CC->>Adv: format instructions
+        Adv->>Jev: call(prompt) with the instructions appended to the last user message
+        Jev->>Jev: strip the appended instructions from the state
+    end
+    Jev->>API: state {system, messages} and the questions
+    API-->>Jev: SystemOneResponse
+    Jev-->>Adv: answers as a JSON object<br/>(only the record's fields when a schema was given)
+    Adv-->>CC: ChatResponse
+    CC-->>App: Triage record
+```
+
 `spec.useProviderStructuredOutput()` selects Spring AI's **native** structured output: the
 record's JSON schema reaches `JevChatModel` in the options. Prefer it:
 
