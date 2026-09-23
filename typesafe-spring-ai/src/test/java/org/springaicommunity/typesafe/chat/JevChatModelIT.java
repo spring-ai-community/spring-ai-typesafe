@@ -92,6 +92,17 @@ class JevChatModelIT {
 	}
 
 	@Test
+	void triagesThroughNativeStructuredOutput() {
+		Triage triage = this.chatClient.prompt()
+			.user("Production is down after the 14:00 deploy; every customer gets HTTP 500.")
+			.call()
+			.entity(Triage.class, spec -> spec.useProviderStructuredOutput());
+
+		assertThat(triage.team()).isEqualTo("infra");
+		assertThat(triage.urgent()).isGreaterThan(0.7d);
+	}
+
+	@Test
 	void reportsRealTokenUsageOnTheStandardMeter() {
 		SimpleMeterRegistry meters = new SimpleMeterRegistry();
 		ObservationRegistry registry = ObservationRegistry.create();

@@ -26,6 +26,7 @@ import io.micrometer.observation.ObservationRegistry;
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.TypeSafeClient;
+import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Question;
 import org.springaicommunity.typesafe.question.SystemOneRequest;
 import org.springaicommunity.typesafe.response.Answer;
@@ -34,6 +35,7 @@ import org.springaicommunity.typesafe.response.NoulAnswer;
 import org.springaicommunity.typesafe.response.ScoreAnswer;
 import org.springaicommunity.typesafe.response.SystemOneResponse;
 import reactor.core.publisher.Flux;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -51,6 +53,7 @@ import org.springframework.ai.chat.observation.ChatModelObservationDocumentation
 import org.springframework.ai.chat.observation.DefaultChatModelObservationConvention;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.StructuredOutputChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -80,8 +83,17 @@ import org.springframework.util.StringUtils;
  * metadata under {@link #RESPONSE_METADATA_KEY}.
  *
  * <p>
+ * Prefer {@code ChatClient}'s native structured output,
+ * {@code .entity(Triage.class, spec -> spec.useProviderStructuredOutput())}. The record's
+ * JSON schema then arrives in the options rather than as instructions appended to the user
+ * message, so the state stays exactly what the caller wrote. The schema is also checked
+ * against the questions before any call: a record field with no question, or with a type
+ * the answer cannot fill, fails with a message naming the field. Without it, the
+ * prompt-based format instructions are recognised by their opening sentence and removed.
+ *
+ * <p>
  * What a chat model normally does and this one cannot is refused rather than faked:
- * streaming is unsupported; {@link #getOptions()} are plain {@link ChatOptions}, so
+ * streaming is unsupported; {@link #getOptions()} are not tool-calling options, so
  * {@code ChatClient} never runs its tool loop and drops any tools it was given; and a
  * prompt that carries tool callbacks directly is rejected. Memory or retrieval advisors
  * do work, but only as a way to put more text into the state.
@@ -148,6 +160,7 @@ public final class JevChatModel implements ChatModel {
 	public ChatResponse call(Prompt prompt) {
 		Assert.notNull(prompt, "prompt must not be null");
 		rejectTools(prompt.getOptions());
+		checkOutputSchema(prompt.getOptions());
 
 		ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
 			.prompt(prompt)
@@ -195,12 +208,13 @@ public final class JevChatModel implements ChatModel {
 	}
 
 	/**
-	 * Plain {@link ChatOptions}, deliberately not {@code ToolCallingChatOptions}: Jev
-	 * cannot call tools, so {@code ChatClient} must not start its tool loop.
+	 * Structured-output options, so {@code ChatClient} can hand over the record's schema
+	 * natively; deliberately not {@code ToolCallingChatOptions}: Jev cannot call tools, so
+	 * {@code ChatClient} must not start its tool loop.
 	 */
 	@Override
 	public ChatOptions getOptions() {
-		return ChatOptions.builder().model(this.typeSafeClient.defaultModel()).build();
+		return StructuredOutputChatOptions.builder().model(this.typeSafeClient.defaultModel()).build();
 	}
 
 	/**
@@ -213,6 +227,65 @@ public final class JevChatModel implements ChatModel {
 	private String modelOf(@Nullable ChatOptions options) {
 		return options != null && StringUtils.hasText(options.getModel()) ? options.getModel()
 				: this.typeSafeClient.defaultModel();
+	}
+
+	/**
+	 * Checks the schema of the requested record against the questions, when the schema
+	 * arrived natively. Every field needs a question of the same name whose answer fits
+	 * its type: a choice's label into a string (and into every value of an enum), a noul's
+	 * or score's value into a number. Questions the record does not ask for are fine.
+	 */
+	private void checkOutputSchema(@Nullable ChatOptions options) {
+		if (!(options instanceof StructuredOutputChatOptions structured)
+				|| !StringUtils.hasText(structured.getOutputSchema())) {
+			return;
+		}
+		JsonNode properties = JSON.readTree(structured.getOutputSchema()).path("properties");
+		for (Map.Entry<String, JsonNode> property : properties.properties()) {
+			String field = property.getKey();
+			Question question = this.questions.get(field);
+			if (question == null) {
+				throw new IllegalArgumentException("The requested type has a field '" + field
+						+ "' that no question answers; the questions are " + this.questions.keySet());
+			}
+			JsonNode schema = property.getValue();
+			if (question instanceof Choice choice) {
+				requireType(field, schema, "string", "a choice's label");
+				JsonNode allowed = schema.path("enum");
+				if (allowed.isArray()) {
+					List<String> values = new ArrayList<>();
+					allowed.forEach(value -> values.add(value.asString()));
+					choice.criteria().keySet().forEach(option -> {
+						if (!values.contains(option)) {
+							throw new IllegalArgumentException("Field '" + field + "' cannot hold the choice option '"
+									+ option + "'; its values are " + values);
+						}
+					});
+				}
+			}
+			else {
+				requireType(field, schema, "number", "a number");
+			}
+		}
+	}
+
+	/**
+	 * Requires the field's schema type to include {@code expected}. An {@code integer}
+	 * field is rejected for a noul or score: a value such as 0.97 or 1.8 would not fit.
+	 */
+	private static void requireType(String field, JsonNode schema, String expected, String answer) {
+		List<String> types = new ArrayList<>();
+		JsonNode type = schema.path("type");
+		if (type.isArray()) {
+			type.forEach(value -> types.add(value.asString()));
+		}
+		else if (type.isString()) {
+			types.add(type.asString());
+		}
+		if (!types.isEmpty() && !types.contains(expected)) {
+			throw new IllegalArgumentException("Field '" + field + "' is of type " + types + " but receives " + answer
+					+ ", which needs " + expected);
+		}
 	}
 
 	private static void rejectTools(@Nullable ChatOptions options) {

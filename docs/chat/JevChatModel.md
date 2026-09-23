@@ -57,6 +57,35 @@ Triage t = ChatClient.create(triage)
 
 Name each question after the record component its answer should land in.
 
+### Structured output
+
+Prefer `ChatClient`'s **native** structured output:
+
+```java
+Triage t = ChatClient.create(triage)
+    .prompt()
+    .user(ticket)
+    .call()
+    .entity(Triage.class, spec -> spec.useProviderStructuredOutput());
+```
+
+The record's JSON schema then reaches `JevChatModel` in the options, instead of as
+instructions appended to the user message. That has two effects:
+
+- **The state is exactly what the caller wrote.** Nothing has to be stripped.
+- **The record is checked against the questions before any call.** A field fails with a
+  message naming it when:
+  - no question answers it
+  - its type can't hold the answer: a choice's label needs a `String` or an enum that
+    contains every option; a noul's or score's value needs a `double`
+  Questions the record doesn't ask for are fine.
+
+With plain `.entity(Triage.class)`, Spring AI uses **prompt-based** structured output: it
+appends format instructions to the user message. `JevChatModel` recognises them by their
+opening sentence ("Your response should be in JSON format.") and removes them from the
+state. That works with `BeanOutputConverter`, Spring AI's default converter, but it depends
+on its exact wording and skips the schema check.
+
 ## What comes back
 
 The reply is a JSON object with one field per question, in declaration order:
@@ -98,8 +127,9 @@ By default, the prompt becomes this state:
 
 - `system` (`JevChatModel.SYSTEM_FIELD`) is left out when there is no system message.
 - `messages` (`JevChatModel.MESSAGES_FIELD`) holds the user and assistant turns in order.
-- When `ChatClient.entity(...)` appends JSON format instructions to the user message, they
-  are removed. They tell a generator how to reply, and Jev's reply shape is fixed.
+- With prompt-based structured output, the JSON format instructions `ChatClient.entity(...)`
+  appends to the user message are removed. They tell a generator how to reply, and Jev's
+  reply shape is fixed. See [structured output](#structured-output).
 
 Write question instructions in terms of that state, for example "the user's ticket". To
 judge a different shape, supply your own converter:
@@ -130,7 +160,7 @@ default model.
 | Chat-model feature | `JevChatModel` |
 |---|---|
 | `stream(...)` | errors with `UnsupportedOperationException`. Jev answers every question at once. |
-| Tools given to `ChatClient` | dropped. `getOptions()` are plain `ChatOptions`, so `ChatClient` never starts its tool loop. |
+| Tools given to `ChatClient` | dropped. `getOptions()` are not tool-calling options, so `ChatClient` never starts its tool loop. |
 | A `Prompt` carrying tool callbacks directly | rejected with `IllegalArgumentException`. |
 | Temperature, top-p, max tokens | ignored; Jev has no such settings. |
 

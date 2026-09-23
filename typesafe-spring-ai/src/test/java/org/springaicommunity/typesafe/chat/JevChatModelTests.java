@@ -43,6 +43,7 @@ import org.springframework.ai.chat.observation.ChatModelMeterObservationHandler;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.StructuredOutputChatOptions;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 
@@ -94,6 +95,84 @@ class JevChatModelTests {
 
 		assertThat(triage).isEqualTo(new Triage("infra", 0.97d, 1.8d));
 		this.mock.server().verify();
+	}
+
+	@Test
+	void takesTheSchemaNativelyAndLeavesTheUserMessageUntouched() {
+		// With native structured output the schema travels in the options, so there are
+		// no format instructions in the prompt to strip.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.messages[0].content").value(TICKET))
+			.andRespond(MockTypeSafeServer.jsonResponse(TRIAGE_RESPONSE));
+
+		Triage triage = ChatClient.create(triageModel())
+			.prompt()
+			.user(TICKET)
+			.call()
+			.entity(Triage.class, spec -> spec.useProviderStructuredOutput());
+
+		assertThat(triage).isEqualTo(new Triage("infra", 0.97d, 1.8d));
+		this.mock.server().verify();
+	}
+
+	record Mistyped(double team) {
+	}
+
+	record UnknownField(String team, String priority) {
+	}
+
+	enum Team {
+
+		infra, billing
+
+	}
+
+	record NarrowEnum(Team team) {
+	}
+
+	@Test
+	void rejectsARecordFieldNoQuestionAnswersBeforeCallingJev() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> ChatClient.create(triageModel())
+				.prompt()
+				.user(TICKET)
+				.call()
+				.entity(UnknownField.class, spec -> spec.useProviderStructuredOutput()))
+			.withMessageContaining("field 'priority' that no question answers")
+			.withMessageContaining("[team, urgent, severity]");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void rejectsAChoiceMappedOntoANumber() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> ChatClient.create(triageModel())
+				.prompt()
+				.user(TICKET)
+				.call()
+				.entity(Mistyped.class, spec -> spec.useProviderStructuredOutput()))
+			.withMessageContaining("Field 'team'")
+			.withMessageContaining("a choice's label");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void rejectsAnEnumThatCannotHoldEveryChoiceOption() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> ChatClient.create(triageModel())
+				.prompt()
+				.user(TICKET)
+				.call()
+				.entity(NarrowEnum.class, spec -> spec.useProviderStructuredOutput()))
+			.withMessageContaining("cannot hold the choice option 'support'");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void offersStructuredOutputOptionsButNotToolCallingOnes() {
+		assertThat(triageModel().getOptions()).isInstanceOf(StructuredOutputChatOptions.class)
+			.isNotInstanceOf(ToolCallingChatOptions.class);
 	}
 
 	@Test
