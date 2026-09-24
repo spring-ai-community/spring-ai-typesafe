@@ -165,7 +165,7 @@ public record Score(@JsonProperty("instructions") @Nullable JsonContent instruct
 		}
 
 		public Score build() {
-			return new Score(this.instructions, Collections.unmodifiableList(new ArrayList<>(this.criteria)));
+			return new Score(this.instructions, this.criteria);
 		}
 
 	}

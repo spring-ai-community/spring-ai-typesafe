@@ -129,8 +129,7 @@ public record SystemOneRequest(@JsonProperty("state") JsonContent state,
 
 		public SystemOneRequest build() {
 			Assert.notNull(this.state, "state must be set");
-			return new SystemOneRequest(this.state, this.model,
-					Collections.unmodifiableMap(new LinkedHashMap<>(this.questions)));
+			return new SystemOneRequest(this.state, this.model, this.questions);
 		}
 
 	}

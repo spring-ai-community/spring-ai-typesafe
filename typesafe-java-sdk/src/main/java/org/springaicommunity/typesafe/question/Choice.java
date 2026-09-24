@@ -162,7 +162,7 @@ public record Choice(@JsonProperty("instructions") @Nullable JsonContent instruc
 		}
 
 		public Choice build() {
-			return new Choice(this.instructions, Collections.unmodifiableMap(new LinkedHashMap<>(this.criteria)));
+			return new Choice(this.instructions, this.criteria);
 		}
 
 	}
