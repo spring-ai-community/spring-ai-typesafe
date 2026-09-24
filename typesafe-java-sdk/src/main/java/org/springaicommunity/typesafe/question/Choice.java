@@ -60,6 +60,7 @@ public record Choice(@JsonProperty("instructions") @Nullable JsonContent instruc
 
 	public Choice {
 		Assert.notEmpty(criteria, "criteria must declare at least one option");
+		criteria = Collections.unmodifiableMap(new LinkedHashMap<>(criteria));
 	}
 
 	@Override

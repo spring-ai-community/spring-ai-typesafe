@@ -18,6 +18,8 @@ package org.springaicommunity.typesafe.question;
 
 
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +29,7 @@ import org.springaicommunity.typesafe.TypeSafeModels;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The builders reject a malformed question locally rather than letting the API answer 422
@@ -180,6 +183,44 @@ class QuestionBuilderTests {
 		assertThatIllegalArgumentException()
 			.isThrownBy(() -> SystemOneRequest.builder().state("anything").model(TypeSafeModels.JEV_LATEST).build())
 			.withMessageContaining("at least one question");
+	}
+
+	@Test
+	void choiceConstructorCopiesCriteria() {
+		Map<String, JsonContent> criteria = new LinkedHashMap<>();
+		criteria.put("billing", JsonContent.of("Payments"));
+
+		Choice choice = new Choice(null, criteria);
+		criteria.put("technical", JsonContent.of("Bugs"));
+
+		assertThat(choice.criteria()).containsOnlyKeys("billing");
+		assertThatThrownBy(() -> choice.criteria().put("sales", JsonContent.of("Upgrades")))
+			.isInstanceOf(UnsupportedOperationException.class);
+	}
+
+	@Test
+	void scoreConstructorCopiesCriteria() {
+		List<JsonContent> criteria = new ArrayList<>(List.of(JsonContent.of("Low"), JsonContent.of("High")));
+
+		Score score = new Score(null, criteria);
+		criteria.add(JsonContent.of("Critical"));
+
+		assertThat(score.criteria()).containsExactly(JsonContent.of("Low"), JsonContent.of("High"));
+		assertThatThrownBy(() -> score.criteria().add(JsonContent.of("Critical")))
+			.isInstanceOf(UnsupportedOperationException.class);
+	}
+
+	@Test
+	void requestConstructorCopiesQuestions() {
+		Map<String, Question> questions = new LinkedHashMap<>();
+		questions.put("probe", Noul.of("Is this a probe?"));
+
+		SystemOneRequest request = new SystemOneRequest(JsonContent.of("anything"), null, questions);
+		questions.put("late", Noul.of("Was this added later?"));
+
+		assertThat(request.questions()).containsOnlyKeys("probe");
+		assertThatThrownBy(() -> request.questions().put("another", Noul.of("Can this be added?")))
+			.isInstanceOf(UnsupportedOperationException.class);
 	}
 
 }

@@ -47,6 +47,7 @@ public record SystemOneRequest(@JsonProperty("state") JsonContent state,
 	public SystemOneRequest {
 		Assert.notNull(state, "state must not be null");
 		Assert.notEmpty(questions, "questions must declare at least one question");
+		questions = Collections.unmodifiableMap(new LinkedHashMap<>(questions));
 	}
 
 	/**
