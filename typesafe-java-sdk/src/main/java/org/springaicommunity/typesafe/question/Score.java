@@ -59,6 +59,7 @@ public record Score(@JsonProperty("instructions") @Nullable JsonContent instruct
 	public Score {
 		Assert.notNull(criteria, "criteria must not be null");
 		Assert.isTrue(criteria.size() >= 2, "criteria must declare at least two levels");
+		criteria = Collections.unmodifiableList(new ArrayList<>(criteria));
 	}
 
 	/**
@@ -164,7 +165,7 @@ public record Score(@JsonProperty("instructions") @Nullable JsonContent instruct
 		}
 
 		public Score build() {
-			return new Score(this.instructions, Collections.unmodifiableList(new ArrayList<>(this.criteria)));
+			return new Score(this.instructions, this.criteria);
 		}
 
 	}
