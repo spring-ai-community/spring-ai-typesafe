@@ -68,7 +68,6 @@ public class ModelJudgeDemoApplication {
 					.defaultAdvisors(JevSelfRefineAdvisor.builder()
 							.order(JevSelfRefineAdvisor.BEFORE_TOOLS_ORDER)
 							.judge(createWeatherJudge(typeSafeClient))
-							.maxRepeatAttempts(10)
 							.build())
 					.build();
 
