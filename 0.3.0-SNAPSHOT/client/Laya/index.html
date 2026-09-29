@@ -2084,9 +2084,11 @@ Jev, on the same inputs. Measured on Laya 0.3.11:</p>
 <ul>
 <li>Laya's answers are less decisive: confidences sit nearer the middle.</li>
 <li>It misses subtler signals.</li>
-<li>It is sensitive to the order of fields in the state. The same record with its keys
-  reordered can score quite differently, so build states in a fixed order (<code>LinkedHashMap</code>,
-  not <code>Map.of</code>) when you compare runs.</li>
+<li>It is sensitive to the order of fields in the state: the same record with its keys
+  reordered can score quite differently. The SDK's own components send a fixed order; for
+  your own state and instructions, use <code>JsonContent.object(...)</code> rather than <code>Map.of</code>,
+  whose order changes with every JVM run. See
+  <a href="../TypeSafeClient/#key-order-matters">key order matters</a>.</li>
 <li>A warm three-question call takes about 30 ms on a laptop GPU.</li>
 </ul>
 <p>Use Laya where speed, cost or data locality matter more than Jev's accuracy, and set

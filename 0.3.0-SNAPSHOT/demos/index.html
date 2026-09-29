@@ -1940,6 +1940,17 @@ takes <code>-pl examples</code> <strong>without</strong> <code>-am</code>.</p>
 </tbody>
 </table>
 <p>Only the last needs <code>ANTHROPIC_API_KEY</code>.</p>
+<div class="admonition tip">
+<p class="admonition-title">Running the demos against Laya</p>
+<p>The plain demos build their client with <code>TypeSafeClient.builder()</code>, so they follow
+<code>TYPESAFE_BASE_URL</code> and <code>TYPESAFE_API_KEY</code>. The Spring Boot demo reads
+<code>SPRING_AI_TYPESAFE_BASE_URL</code> and <code>SPRING_AI_TYPESAFE_API_KEY</code>. Pointed at a local
+<a href="../client/Laya/">Laya</a> server, they run, but the answers differ from Jev's; see
+<a href="../client/Laya/#how-it-compares">how it compares</a>. <code>JevQuickstart</code> stops at
+<code>listModels()</code>, since Laya has no <code>/v1/models</code>, and the Model-as-a-judge demo is not a
+meaningful Laya test; see
+<a href="../client/Laya/#criteria-that-need-world-knowledge">criteria that need world knowledge</a>.</p>
+</div>
 <h2 id="jevquickstart">JevQuickstart<a class="headerlink" href="#jevquickstart" title="Permanent link">&para;</a></h2>
 <p>Plain <code>main()</code>, no Spring context. Lists the available models, then asks a noul, a choice
 and a score about one support ticket in a single call, and gates the routing decision on the
