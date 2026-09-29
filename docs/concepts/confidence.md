@@ -87,6 +87,9 @@ Tier your thresholds by what the action costs when it is wrong. A universal floo
 anything genuinely undecided away from automation; above it, expensive actions demand more
 than cheap ones.
 
+Thresholds are properties of the model that answers. Tuned on Jev, they don't carry over to
+another backend such as [Laya](../client/Laya.md); measure them again there.
+
 [`JevConfidenceGate`](../patterns/JevConfidenceGate.md) holds that policy in one place:
 
 ```java

@@ -154,6 +154,7 @@ is set — see [Spring Boot Starter](client/SpringBootStarter.md).
 | Pick a tool from a large toolset | [JevToolIndex](toolsearch/JevToolIndex.md) |
 | Score many items at once | [Batches](client/Batches.md) |
 | See it all working | [Demos](demos.md) |
+| Run without an API key, or offline | [Using Laya](client/Laya.md) |
 
 ## Requirements
 
@@ -161,7 +162,7 @@ is set — see [Spring Boot Starter](client/SpringBootStarter.md).
 - Spring Boot 4.x (for the starter)
 - Spring AI 2.0.1 or later (for `typesafe-spring-ai`)
 - Maven 3.6+
-- A TypeSafe API key
+- A TypeSafe API key, or a compatible local server such as [Laya](client/Laya.md)
 
 ## Building
 

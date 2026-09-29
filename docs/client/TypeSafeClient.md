@@ -45,7 +45,7 @@ TypeSafeClient client = TypeSafeClient.builder()
 |---|---|---|---|
 | `apiKey(String)` | `String` | `$TYPESAFE_API_KEY` | The API key. |
 | `apiKey(Supplier<String>)` | `Supplier<String>` | — | Consulted **per request**, so a rotated key takes effect without rebuilding the client. |
-| `baseUrl(String)` | `String` | `$TYPESAFE_BASE_URL`, else `https://api.typesafe.ai` | The API base URL. |
+| `baseUrl(String)` | `String` | `$TYPESAFE_BASE_URL`, else `https://api.typesafe.ai` | The API base URL, e.g. a local [Laya](Laya.md) server. |
 | `defaultModel(String)` | `String` | `$TYPESAFE_DEFAULT_MODEL`, else `jev-latest` | Applied to any request that does not name a model. |
 | `timeout(Duration)` | `Duration` | `10s` | Per-attempt HTTP timeout. Also counted against the retry budget — see [Errors and Retries](ErrorsAndRetries.md). |
 | `retryPolicy(RetryPolicy)` | `RetryPolicy` | `RetryPolicy.defaults()` | Which failures are repeated and how often. |

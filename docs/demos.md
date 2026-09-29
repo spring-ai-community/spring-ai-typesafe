@@ -16,6 +16,16 @@ takes `-pl examples` **without** `-am`.
 
 Only the last needs `ANTHROPIC_API_KEY`.
 
+!!! tip "Running the demos against Laya"
+    The plain demos build their client with `TypeSafeClient.builder()`, so they follow
+    `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY`. The Spring Boot demo reads
+    `SPRING_AI_TYPESAFE_BASE_URL` and `SPRING_AI_TYPESAFE_API_KEY`. Pointed at a local
+    [Laya](client/Laya.md) server, they run, but the answers differ from Jev's; see
+    [how it compares](client/Laya.md#how-it-compares). `JevQuickstart` stops at
+    `listModels()`, since Laya has no `/v1/models`, and the Model-as-a-judge demo is not a
+    meaningful Laya test; see
+    [criteria that need world knowledge](client/Laya.md#criteria-that-need-world-knowledge).
+
 ## JevQuickstart
 
 Plain `main()`, no Spring context. Lists the available models, then asks a noul, a choice
