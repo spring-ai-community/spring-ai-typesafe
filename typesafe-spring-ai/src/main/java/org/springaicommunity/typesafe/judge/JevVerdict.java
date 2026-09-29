@@ -76,13 +76,21 @@ public record JevVerdict(boolean passed, List<JevFinding> findings, @Nullable Sy
 	}
 
 	/**
+	 * @return the findings a {@link JevEscalation} decided because Jev was unsure
+	 */
+	public List<JevFinding> escalated() {
+		return this.findings.stream().filter(JevFinding::escalated).toList();
+	}
+
+	/**
 	 * A one line summary suitable for a log, for example
-	 * {@code passed=false [helpfulness=FAILED, is_plausible=FAILED]}.
+	 * {@code passed=false [helpfulness=FAILED, is_plausible=FAILED(escalated)]}.
 	 * @return the summary
 	 */
 	public String summary() {
 		String perCriterion = this.findings.stream()
-			.map(finding -> "%s=%s".formatted(finding.name(), finding.outcome()))
+			.map(finding -> "%s=%s%s".formatted(finding.name(), finding.outcome(),
+					finding.escalated() ? "(escalated)" : ""))
 			.reduce((a, b) -> a + ", " + b)
 			.orElse("");
 		return "passed=%s [%s]".formatted(this.passed, perCriterion);

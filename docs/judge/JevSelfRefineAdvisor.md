@@ -157,6 +157,24 @@ JevSelfRefineAdvisor.builder()
 Only failures of the judging call are covered. An exception thrown by one of the judge's
 code checks is a bug in the check, and always propagates.
 
+## Escalating uncertain verdicts
+
+By default a criterion Jev is unsure about is `INCONCLUSIVE` and doesn't trigger a retry.
+Build the judge with
+[`escalateTo`](JevJudge.md#escalating-uncertain-criteria) and those criteria are decided by
+a stronger judge instead: a retry follows its verdict, and its reason joins the feedback.
+The advisor itself needs no change.
+
+```java
+JevJudge judge = JevJudge.builder(typeSafeClient)
+    .noul("is_plausible", plausibleNoul, 0.7)
+    .escalateTo(ChatModelEscalation.builder(judgeChatModel).build())
+    .build();
+```
+
+Prefer a judge model other than the one being refined: a model grading its own answers
+tends to approve them.
+
 ## Ordering with the guardrail advisor
 
 The two compose, and they do different jobs.

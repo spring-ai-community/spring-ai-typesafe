@@ -29,9 +29,23 @@ import org.springaicommunity.typesafe.response.Answer;
  * @param outcome whether the criterion passed, failed or could not be decided
  * @param detail a sentence naming the defect, ready to be handed back to the model as
  * feedback; empty when the criterion passed
+ * @param escalated whether a {@link JevEscalation} decided this criterion because Jev was
+ * unsure; {@link #answer()} is then the escalation's answer
  * @author Christian Tzolov
  */
-public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcome outcome, String detail) {
+public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcome outcome, String detail,
+		boolean escalated) {
+
+	/**
+	 * A finding Jev, or a code check, decided itself.
+	 * @param criterion the criterion that was checked
+	 * @param answer the answer, or {@code null}
+	 * @param outcome the outcome
+	 * @param detail the defect, empty when the criterion passed
+	 */
+	public JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcome outcome, String detail) {
+		this(criterion, answer, outcome, detail, false);
+	}
 
 	/**
 	 * @return the name of the criterion

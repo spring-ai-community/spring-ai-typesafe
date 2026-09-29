@@ -1,5 +1,25 @@
 # Changes
 
+## 0.4.0 (unreleased)
+
+### New
+
+- **Escalating uncertain criteria:** `JevJudge.Builder.escalateTo(JevEscalation[, threshold])`
+  hands the criteria Jev was unsure about (errored, inconclusive, or below the threshold,
+  0.9 by default) to a stronger judge. Confident verdicts are kept; the stronger judge's
+  answer is judged by the criterion's own rule. `ChatModelEscalation` is the LLM-as-a-judge
+  implementation. It follows Li et al.,
+  [JEV-as-a-Judge: Accept When Confident, Escalate When Unsure](https://arxiv.org/abs/2609.26550).
+  See [Escalating uncertain criteria](judge/JevJudge.md#escalating-uncertain-criteria).
+- **Demo:** [`EscalatingJudgeDemoApplication`](demos.md#escalatingjudgedemoapplication) judges
+  four answers with and without escalation, side by side.
+
+### Breaking changes
+
+| Change | Migrate |
+|---|---|
+| **`JevFinding` has a fifth component, `escalated`.** The four-argument constructor is kept. | Record patterns over `JevFinding` need the extra component. |
+
 ## 0.3.0
 
 Requests now go out in the same order on every run, retries and RAG screening no longer
