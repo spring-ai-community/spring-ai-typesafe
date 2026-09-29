@@ -817,6 +817,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Asking questions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#key-order-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key order matters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1809,6 +1826,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Asking questions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#key-order-matters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key order matters
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2045,7 +2079,7 @@ sending both.</p>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">client</span><span class="p">.</span><span class="na">systemOne</span><span class="p">(</span><span class="s">"Help! My payouts have been failing."</span><span class="p">,</span><span class="w"> </span><span class="n">questions</span><span class="p">);</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1">// A JSON object — name fields in your instructions to point a question at one of them</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">client</span><span class="p">.</span><span class="na">systemOne</span><span class="p">(</span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"sender"</span><span class="p">,</span><span class="w"> </span><span class="n">sender</span><span class="p">,</span><span class="w"> </span><span class="s">"message"</span><span class="p">,</span><span class="w"> </span><span class="n">body</span><span class="p">),</span><span class="w"> </span><span class="n">questions</span><span class="p">);</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">client</span><span class="p">.</span><span class="na">systemOne</span><span class="p">(</span><span class="n">JsonContent</span><span class="p">.</span><span class="na">object</span><span class="p">(</span><span class="s">"sender"</span><span class="p">,</span><span class="w"> </span><span class="n">sender</span><span class="p">,</span><span class="w"> </span><span class="s">"message"</span><span class="p">,</span><span class="w"> </span><span class="n">body</span><span class="p">),</span><span class="w"> </span><span class="n">questions</span><span class="p">);</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1">// A JSON array, for a thread or a list</span>
 </span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="n">client</span><span class="p">.</span><span class="na">systemOne</span><span class="p">(</span><span class="n">List</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"Hi"</span><span class="p">,</span><span class="w"> </span><span class="s">"My card was charged twice."</span><span class="p">),</span><span class="w"> </span><span class="n">questions</span><span class="p">);</span>
@@ -2065,32 +2099,59 @@ sending both.</p>
 <p>The model is optional on a request. Leave it out and the client fills in its default,
 which is what makes <code>TYPESAFE_DEFAULT_MODEL</code> and <code>spring.ai.typesafe.model</code> reach the wire
 through this overload too.</p>
+<h3 id="key-order-matters">Key order matters<a class="headerlink" href="#key-order-matters" title="Permanent link">&para;</a></h3>
+<p>JSON object keys have no meaning, but the model reads the state, the questions and any
+structured instructions in the order they are sent, and a different order can change an
+answer. On hosted Jev the effect is small; on some compatible servers, such as
+<a href="../Laya/">Laya</a>, it can flip a decision.</p>
+<p><code>Map.of</code> iterates in an order that changes with every JVM run, so the same code can send a
+different request each time. Build multi-key content in a fixed order instead:</p>
+<ul>
+<li><strong>State, structured instructions and criteria descriptions:</strong>
+  <code>JsonContent.object(key, value, ...)</code> keeps the keys in the order you write them. Put the
+  part the question is about first, such as the request before a catalogue, or the question
+  before its hints.</li>
+<li><strong>Questions:</strong> <code>SystemOneRequest.builder().question(name, q)</code>, or a <code>LinkedHashMap</code>.</li>
+<li><strong>Options and levels:</strong> <code>Choice.builder().option(...)</code> and <code>Score.builder().level(...)</code>
+  already keep declaration order.</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">client</span><span class="p">.</span><span class="na">systemOne</span><span class="p">(</span><span class="n">SystemOneRequest</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">        </span><span class="p">.</span><span class="na">state</span><span class="p">(</span><span class="n">JsonContent</span><span class="p">.</span><span class="na">object</span><span class="p">(</span><span class="s">"user_request"</span><span class="p">,</span><span class="w"> </span><span class="n">request</span><span class="p">,</span><span class="w"> </span><span class="s">"available_tools"</span><span class="p">,</span><span class="w"> </span><span class="n">tools</span><span class="p">))</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">        </span><span class="p">.</span><span class="na">question</span><span class="p">(</span><span class="s">"any_tool_applies"</span><span class="p">,</span><span class="w"> </span><span class="n">Noul</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">                </span><span class="p">.</span><span class="na">instructions</span><span class="p">(</span><span class="n">JsonContent</span><span class="p">.</span><span class="na">object</span><span class="p">(</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">                        </span><span class="s">"question"</span><span class="p">,</span><span class="w"> </span><span class="s">"Does any tool in `available_tools` do what `user_request` needs?"</span><span class="p">,</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">                        </span><span class="s">"inspect"</span><span class="p">,</span><span class="w">  </span><span class="s">"available_tools"</span><span class="p">))</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">                </span><span class="p">.</span><span class="na">build</span><span class="p">())</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">        </span><span class="p">.</span><span class="na">build</span><span class="p">());</span>
+</span></code></pre></div>
+<p>The SDK's own components (the judge, the RAG post-processors, the tool index and
+<code>JevChatModel</code>) build their requests in a fixed order.</p>
 <h2 id="reading-answers">Reading answers<a class="headerlink" href="#reading-answers" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kt">double</span><span class="w">  </span><span class="n">urgency</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">noulValue</span><span class="p">(</span><span class="s">"is_urgent"</span><span class="p">);</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">String</span><span class="w">  </span><span class="n">department</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">choiceValue</span><span class="p">(</span><span class="s">"department"</span><span class="p">);</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kt">double</span><span class="w">  </span><span class="n">score</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">scoreValue</span><span class="p">(</span><span class="s">"frustration"</span><span class="p">);</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1">// The typed answer, for everything beyond the value</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">ChoiceAnswer</span><span class="w"> </span><span class="n">choice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">choice</span><span class="p">(</span><span class="s">"department"</span><span class="p">);</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">choice</span><span class="p">.</span><span class="na">confidence</span><span class="p">();</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="n">choice</span><span class="p">.</span><span class="na">probabilityOf</span><span class="p">(</span><span class="s">"billing"</span><span class="p">);</span>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">choice</span><span class="p">.</span><span class="na">optionsAbove</span><span class="p">(</span><span class="mf">0.1d</span><span class="p">);</span><span class="w">      </span><span class="c1">// labels, descending by probability</span>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="c1">// Grouped views, in the order the request named the questions</span>
-</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">NoulAnswer</span><span class="o">&gt;</span><span class="w">   </span><span class="n">nouls</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">nouls</span><span class="p">();</span>
-</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">ChoiceAnswer</span><span class="o">&gt;</span><span class="w"> </span><span class="n">choices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">choices</span><span class="p">();</span>
-</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">ScoreAnswer</span><span class="o">&gt;</span><span class="w">  </span><span class="n">scores</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">scores</span><span class="p">();</span>
-</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>
-</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="n">response</span><span class="p">.</span><span class="na">usage</span><span class="p">().</span><span class="na">inputTokens</span><span class="p">();</span>
-</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="n">response</span><span class="p">.</span><span class="na">requestId</span><span class="p">();</span><span class="w">           </span><span class="c1">// quote this when reporting a problem</span>
+<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kt">double</span><span class="w">  </span><span class="n">urgency</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">noulValue</span><span class="p">(</span><span class="s">"is_urgent"</span><span class="p">);</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">String</span><span class="w">  </span><span class="n">department</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">choiceValue</span><span class="p">(</span><span class="s">"department"</span><span class="p">);</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="kt">double</span><span class="w">  </span><span class="n">score</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">scoreValue</span><span class="p">(</span><span class="s">"frustration"</span><span class="p">);</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1">// The typed answer, for everything beyond the value</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">ChoiceAnswer</span><span class="w"> </span><span class="n">choice</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">choice</span><span class="p">(</span><span class="s">"department"</span><span class="p">);</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">choice</span><span class="p">.</span><span class="na">confidence</span><span class="p">();</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">choice</span><span class="p">.</span><span class="na">probabilityOf</span><span class="p">(</span><span class="s">"billing"</span><span class="p">);</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="n">choice</span><span class="p">.</span><span class="na">optionsAbove</span><span class="p">(</span><span class="mf">0.1d</span><span class="p">);</span><span class="w">      </span><span class="c1">// labels, descending by probability</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="c1">// Grouped views, in the order the request named the questions</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">NoulAnswer</span><span class="o">&gt;</span><span class="w">   </span><span class="n">nouls</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">nouls</span><span class="p">();</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">ChoiceAnswer</span><span class="o">&gt;</span><span class="w"> </span><span class="n">choices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">choices</span><span class="p">();</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">ScoreAnswer</span><span class="o">&gt;</span><span class="w">  </span><span class="n">scores</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">scores</span><span class="p">();</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="n">response</span><span class="p">.</span><span class="na">usage</span><span class="p">().</span><span class="na">inputTokens</span><span class="p">();</span>
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="n">response</span><span class="p">.</span><span class="na">requestId</span><span class="p">();</span><span class="w">           </span><span class="c1">// quote this when reporting a problem</span>
 </span></code></pre></div>
 <p>Asking for the wrong kind raises <code>TypeSafeAnswerTypeException</code>, and asking for a name the
 response does not carry raises <code>TypeSafeMissingAnswerException</code> — both client-side, both
 telling you which name and what was actually there.</p>
 <h2 id="listing-models">Listing models<a class="headerlink" href="#listing-models" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">ModelMetadata</span><span class="w"> </span><span class="n">model</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="na">listModels</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">printf</span><span class="p">(</span><span class="s">"%s — %s (%s)%n"</span><span class="p">,</span><span class="w"> </span><span class="n">model</span><span class="p">.</span><span class="na">name</span><span class="p">(),</span><span class="w"> </span><span class="n">model</span><span class="p">.</span><span class="na">description</span><span class="p">(),</span><span class="w"> </span><span class="n">model</span><span class="p">.</span><span class="na">releaseDate</span><span class="p">());</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">ModelMetadata</span><span class="w"> </span><span class="n">model</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="na">listModels</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">printf</span><span class="p">(</span><span class="s">"%s — %s (%s)%n"</span><span class="p">,</span><span class="w"> </span><span class="n">model</span><span class="p">.</span><span class="na">name</span><span class="p">(),</span><span class="w"> </span><span class="n">model</span><span class="p">.</span><span class="na">description</span><span class="p">(),</span><span class="w"> </span><span class="n">model</span><span class="p">.</span><span class="na">releaseDate</span><span class="p">());</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="p">}</span>
 </span></code></pre></div>
 <p><code>TypeSafeModels</code> names the known ids: <code>JEV_LATEST</code>, <code>JEV_PREVIEW</code> and the pinned
 <code>JEV_1_13_0</code>. Aliases resolve server-side, and the response reports the version it resolved
