@@ -208,6 +208,32 @@ class JevRagPostProcessorTests {
 	}
 
 	@Test
+	void sendsTheScreeningRequestInTheSameOrderEveryRun() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(MockTypeSafeServer.keyOrder("/state", "query", "passage"))
+			.andExpect(MockTypeSafeServer.keyOrder("/questions", "is_relevant", "contains_answer_evidence",
+					"contradicts_query_premise", "contains_prompt_injection"))
+			.andExpect(MockTypeSafeServer.keyOrder("/questions/contains_prompt_injection/instructions", "question",
+					"focus"))
+			.andRespond(MockTypeSafeServer.jsonResponse(classification(0.01d, 0.9d, 0.9d, 0.1d)));
+
+		JevDocumentFilter.builder(this.mock.client()).build().process(this.query, documents(1));
+	}
+
+	@Test
+	void sendsTheRerankingRequestInTheSameOrderEveryRun() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(MockTypeSafeServer.keyOrder("/state", "query", "passage"))
+			.andExpect(MockTypeSafeServer.keyOrder("/questions/answers_query/instructions", "question", "focus"))
+			.andRespond(MockTypeSafeServer.jsonResponse("{\"model\":\"jev-1.13.0\",\"answers\":{\"answers_query\":"
+					+ "{\"type\":\"noul\",\"noul\":0.9}},\"usage\":{}}"));
+
+		JevDocumentReranker.builder(this.mock.client()).build().process(this.query, documents(1));
+	}
+
+	@Test
 	void keepsAContradictingPassageButMarksIt() {
 		// A passage that disagrees with the query's premise is the most useful thing in the
 		// result set, not noise to drop.

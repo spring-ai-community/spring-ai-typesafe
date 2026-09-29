@@ -160,7 +160,7 @@ public final class CascadeDemo {
 	private static Map<String, Question> checks() {
 		Map<String, Question> checks = new LinkedHashMap<>();
 		checks.put("invented_value", Noul.builder()
-			.instructions(Map.of("question",
+			.instructions(ordered("question",
 					"Does `extracted` contain a value that does not appear in, and cannot be derived from, "
 							+ "`source_text`?",
 					"inspect", "extracted", "focus",
@@ -175,7 +175,7 @@ public final class CascadeDemo {
 			.whenFalse("The total matches the source")
 			.build());
 		checks.put("missing_field", Noul.builder()
-			.instructions(Map.of("question",
+			.instructions(ordered("question",
 					"Is any field named in `required_fields` absent or empty in `extracted`?", "focus",
 					"Only the fields listed in `required_fields` matter. Detail in the source that the "
 							+ "schema does not ask for, such as individual line items or payment terms, is "
@@ -195,22 +195,34 @@ public final class CascadeDemo {
 		return List.of(
 				new Record("INV-01", "Invoice 4471 from Acme Corp, dated 3 March 2026. Two line items: "
 						+ "consulting 1,200.00 and travel 300.00. Total due 1,500.00.",
-						Map.of("invoice", "4471", "vendor", "Acme Corp", "date", "2026-03-03", "total", "1500.00")),
+						ordered("invoice", "4471", "vendor", "Acme Corp", "date", "2026-03-03", "total", "1500.00")),
 				new Record("INV-02", "Invoice 4472 from Beaver Dam Builders, dated 11 March 2026. "
 						+ "Materials 800.00, labour 450.00. Total due 1,250.00.",
-						Map.of("invoice", "4472", "vendor", "Beaver Dam Builders", "date", "2026-03-11", "total",
+						ordered("invoice", "4472", "vendor", "Beaver Dam Builders", "date", "2026-03-11", "total",
 								"1350.00")),
 				new Record("INV-03", "Invoice 4473 from Cobalt Services, dated 19 March 2026. "
 						+ "Support retainer 2,000.00. Total due 2,000.00.",
-						Map.of("invoice", "4473", "vendor", "Cobalt Services", "date", "2026-03-19", "total",
+						ordered("invoice", "4473", "vendor", "Cobalt Services", "date", "2026-03-19", "total",
 								"2000.00", "purchase_order", "PO-88231")),
 				new Record("INV-04", "Invoice 4474 from Delta Print, dated 2 April 2026. "
 						+ "Printing 175.50. Total due 175.50. Payment terms net 30.",
-						Map.of("invoice", "4474", "vendor", "Delta Print", "date", "2026-04-02", "total", "175.50")),
+						ordered("invoice", "4474", "vendor", "Delta Print", "date", "2026-04-02", "total", "175.50")),
 				new Record("INV-05", "Invoice 4475 from Everline Logistics, dated 14 April 2026. "
 						+ "Freight 640.00, insurance 60.00. Total due 700.00.",
-						Map.of("invoice", "4475", "vendor", "Everline Logistics", "date", "2026-04-14", "total",
+						ordered("invoice", "4475", "vendor", "Everline Logistics", "date", "2026-04-14", "total",
 								"700.00")));
+	}
+
+	/**
+	 * A map that keeps the order its entries are written in. Unlike {@code Map.of}, whose
+	 * order changes with every JVM run, it sends the same JSON every time.
+	 */
+	private static Map<String, String> ordered(String... keysAndValues) {
+		Map<String, String> map = new LinkedHashMap<>();
+		for (int i = 0; i < keysAndValues.length; i += 2) {
+			map.put(keysAndValues[i], keysAndValues[i + 1]);
+		}
+		return map;
 	}
 
 }

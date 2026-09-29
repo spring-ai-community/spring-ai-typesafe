@@ -347,7 +347,10 @@ public final class JevChatModel implements ChatModel {
 					|| message.getMessageType() == MessageType.ASSISTANT) {
 				// Format instructions are only ever appended to the latest user message.
 				String content = (i == lastUser) ? withoutFormatInstructions(text) : text;
-				messages.add(Map.of("role", message.getMessageType().getValue(), "content", content));
+				Map<String, String> entry = new LinkedHashMap<>();
+				entry.put("role", message.getMessageType().getValue());
+				entry.put("content", content);
+				messages.add(entry);
 			}
 		}
 		if (!system.isEmpty()) {
@@ -468,7 +471,9 @@ public final class JevChatModel implements ChatModel {
 		}
 
 		/**
-		 * @param questions questions every call answers, keyed by name
+		 * @param questions questions every call answers, keyed by name, in the map's
+		 * iteration order: pass a {@code LinkedHashMap} rather than {@code Map.of}, whose
+		 * order changes with every JVM run
 		 * @return this builder
 		 */
 		public Builder questions(Map<String, ? extends Question> questions) {

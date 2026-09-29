@@ -16,13 +16,12 @@
 
 package org.springaicommunity.typesafe.demo;
 
-import java.util.Map;
-
 import org.springaicommunity.typesafe.TypeSafeClient;
 import org.springaicommunity.typesafe.TypeSafeConstants;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;
+import org.springaicommunity.typesafe.question.SystemOneRequest;
 import org.springaicommunity.typesafe.response.ModelMetadata;
 import org.springaicommunity.typesafe.response.SystemOneResponse;
 
@@ -54,22 +53,23 @@ public final class JevQuickstart {
 		}
 
 		// @formatter:off
-		SystemOneResponse response = client.systemOne(
-				"Help! My payouts have been failing for 3 days.",
-				Map.of(
-					"is_urgent", Noul.builder()
-							.instructions("Does this convey urgency?")
-							.whenTrue("Explicitly time-sensitive")
-							.whenFalse("No urgency expressed")
-							.build(),
-					"department", Choice.builder()
-							.instructions("Which team should handle this?")
-							.option("billing", "Payments, invoicing, refunds")
-							.option("technical", "Bugs, outages, integrations")
-							.option("sales", "Pricing, upgrades, new accounts")
-							.build(),
-					"frustration", Score.of("How frustrated is the customer?",
-							"Calm", "Frustrated", "Very angry")));
+		// The builder keeps the questions in the order they are added; Map.of would not.
+		SystemOneResponse response = client.systemOne(SystemOneRequest.builder()
+				.state("Help! My payouts have been failing for 3 days.")
+				.question("is_urgent", Noul.builder()
+						.instructions("Does this convey urgency?")
+						.whenTrue("Explicitly time-sensitive")
+						.whenFalse("No urgency expressed")
+						.build())
+				.question("department", Choice.builder()
+						.instructions("Which team should handle this?")
+						.option("billing", "Payments, invoicing, refunds")
+						.option("technical", "Bugs, outages, integrations")
+						.option("sales", "Pricing, upgrades, new accounts")
+						.build())
+				.question("frustration", Score.of("How frustrated is the customer?",
+						"Calm", "Frustrated", "Very angry"))
+				.build());
 		// @formatter:on
 
 		System.out.println();

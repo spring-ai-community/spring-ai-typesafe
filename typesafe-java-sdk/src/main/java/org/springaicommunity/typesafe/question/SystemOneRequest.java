@@ -86,6 +86,13 @@ public record SystemOneRequest(@JsonProperty("state") JsonContent state,
 			return state(JsonContent.of(state));
 		}
 
+		/**
+		 * Sets a structured state. Its fields are sent in the map's iteration order, which
+		 * can change an answer: pass a {@code LinkedHashMap}, not {@code Map.of}, whose
+		 * order changes with every JVM run.
+		 * @param state the state
+		 * @return this builder
+		 */
 		public Builder state(Map<String, ?> state) {
 			Assert.notEmpty(state, "state must not be empty");
 			return state(JsonContent.of(state));
@@ -121,6 +128,13 @@ public record SystemOneRequest(@JsonProperty("state") JsonContent state,
 			return this;
 		}
 
+		/**
+		 * Adds several named questions, in the map's iteration order. Prefer
+		 * {@link #question(String, Question)} or a {@code LinkedHashMap}: {@code Map.of}
+		 * iterates in an order that changes with every JVM run.
+		 * @param questions the questions, keyed by name
+		 * @return this builder
+		 */
 		public Builder questions(Map<String, ? extends Question> questions) {
 			Assert.notEmpty(questions, "questions must not be empty");
 			questions.forEach(this::question);

@@ -15,6 +15,7 @@
  */
 package org.springaicommunity.typesafe.demo.judge;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Random;
 
@@ -130,7 +131,7 @@ public class ModelJudgeDemoApplication {
 				.build(), 0.7d)
 			.noul("is_grounded",
 					Noul.builder()
-						.instructions(Map.of("question",
+						.instructions(ordered("question",
 								"Does `assistant_answer` stay within what `user_question` asked, without asserting "
 										+ "unrelated facts?",
 								"note",
@@ -149,6 +150,18 @@ public class ModelJudgeDemoApplication {
 			// settle pass or fail for this answer, which is reported as undecided
 			// rather than as a failure.
 			.build();
+	}
+
+	/**
+	 * A map that keeps the order its entries are written in. Unlike {@code Map.of}, whose
+	 * order changes with every JVM run, it sends the same JSON every time.
+	 */
+	private static Map<String, String> ordered(String... keysAndValues) {
+		Map<String, String> map = new LinkedHashMap<>();
+		for (int i = 0; i < keysAndValues.length; i += 2) {
+			map.put(keysAndValues[i], keysAndValues[i + 1]);
+		}
+		return map;
 	}
 
 }

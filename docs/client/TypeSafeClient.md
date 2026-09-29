@@ -67,7 +67,10 @@ Four overloads differ only in the shape of the state:
 client.systemOne("Help! My payouts have been failing.", questions);
 
 // A JSON object — name fields in your instructions to point a question at one of them
-client.systemOne(Map.of("sender", sender, "message", body), questions);
+Map<String, Object> state = new LinkedHashMap<>();
+state.put("sender", sender);
+state.put("message", body);
+client.systemOne(state, questions);
 
 // A JSON array, for a thread or a list
 client.systemOne(List.of("Hi", "My card was charged twice."), questions);
@@ -91,6 +94,25 @@ client.systemOne(request);
 The model is optional on a request. Leave it out and the client fills in its default,
 which is what makes `TYPESAFE_DEFAULT_MODEL` and `spring.ai.typesafe.model` reach the wire
 through this overload too.
+
+### Key order matters
+
+JSON object keys have no meaning, but the model reads the state, the questions and any
+structured instructions in the order they are sent, and a different order can change an
+answer. On hosted Jev the effect is small; on some compatible servers, such as
+[Laya](Laya.md), it can flip a decision.
+
+`Map.of` iterates in an order that changes with every JVM run, so the same code can send a
+different request each time. Build multi-key maps in a fixed order instead:
+
+- **Questions:** `SystemOneRequest.builder().question(name, q)`, or a `LinkedHashMap`.
+- **State and structured instructions:** a `LinkedHashMap`, with the part the question is
+  about first, such as the request before a catalogue, or the question before its hints.
+- **Options and levels:** `Choice.builder().option(...)` and `Score.builder().level(...)`
+  already keep declaration order.
+
+The SDK's own components (the judge, the RAG post-processors, the tool index and
+`JevChatModel`) build their requests in a fixed order.
 
 ## Reading answers
 

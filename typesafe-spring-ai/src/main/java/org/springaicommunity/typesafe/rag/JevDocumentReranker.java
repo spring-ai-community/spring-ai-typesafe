@@ -112,7 +112,7 @@ public class JevDocumentReranker implements DocumentPostProcessor {
 		List<org.springaicommunity.typesafe.question.SystemOneRequest> requests = new ArrayList<>(documents.size());
 		for (Document document : documents) {
 			requests.add(org.springaicommunity.typesafe.question.SystemOneRequest.builder()
-				.state(Map.of(QUERY_FIELD, query.text(), PASSAGE_FIELD, text(document)))
+				.state(JevDocumentFilter.state(query.text(), text(document)))
 				.model(this.typeSafeClient.defaultModel())
 				.question(QUESTION_NAME, this.question)
 				.build());
@@ -192,7 +192,7 @@ public class JevDocumentReranker implements DocumentPostProcessor {
 	public static final class Builder {
 
 		private static final Noul DEFAULT_QUESTION = Noul.builder()
-			.instructions(Map.of("question", "Could the `passage` answer the `query`?", "focus",
+			.instructions(JevDocumentFilter.instructions("Could the `passage` answer the `query`?",
 					"Whether the passage states information that answers the query, not merely whether "
 							+ "it covers the same subject."))
 			.whenTrue("The passage contains information that answers the query")

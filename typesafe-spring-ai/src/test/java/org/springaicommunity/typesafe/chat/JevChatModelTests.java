@@ -86,6 +86,7 @@ class JevChatModelTests {
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
 			.andExpect(jsonPath("$.state.messages[0].role").value("user"))
 			.andExpect(jsonPath("$.state.messages[0].content").value(TICKET))
+			.andExpect(MockTypeSafeServer.keyOrder("/state/messages/0", "role", "content"))
 			.andExpect(jsonPath("$.questions.team.type").value("choice"))
 			.andExpect(jsonPath("$.questions.urgent.type").value("noul"))
 			.andExpect(jsonPath("$.questions.severity.type").value("score"))

@@ -29,6 +29,7 @@ import org.springframework.ai.tool.toolsearch.ToolSearchRequest;
 import org.springframework.ai.tool.toolsearch.ToolSearchResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 
@@ -61,6 +62,16 @@ class JevToolIndexTests {
 			.andExpect(jsonPath("$.state.user_request").value("what is it like outside in Paris"))
 			.andExpect(jsonPath("$.questions.best_tool.type").value("choice"))
 			.andExpect(jsonPath("$.questions.any_tool_applies.type").value("noul"))
+			// Same order on every JVM run: the request before the catalogue, the question
+			// before its hints.
+			.andExpect(MockTypeSafeServer.keyOrder("/state", "user_request", "available_tools"))
+			.andExpect(MockTypeSafeServer.keyOrder("/questions/any_tool_applies/instructions", "question", "inspect",
+					"focus"))
+			// The tools in the order they were indexed, both as the catalogue and as options.
+			.andExpect(jsonPath("$.state.available_tools[*].name").value(
+					contains("currentWeather", "sendEmail", "createInvoice")))
+			.andExpect(MockTypeSafeServer.keyOrder("/questions/best_tool/criteria", "currentWeather", "sendEmail",
+					"createInvoice"))
 			.andRespond(MockTypeSafeServer.jsonResponse(response(0.95d, 0.90d, 0.07d, 0.03d)));
 
 		ToolSearchResponse response = this.index
@@ -126,6 +137,7 @@ class JevToolIndexTests {
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
 			.andExpect(jsonPath("$.questions.best_tool").doesNotExist())
 			.andExpect(jsonPath("$.questions.any_tool_applies.type").value("noul"))
+			.andExpect(MockTypeSafeServer.keyOrder("/state", "user_request", "tool"))
 			.andRespond(MockTypeSafeServer.jsonResponse(
 					"{\"model\":\"jev-1.13.0\",\"answers\":{\"any_tool_applies\":{\"type\":\"noul\",\"noul\":0.93}},"
 							+ "\"usage\":{}}"));
