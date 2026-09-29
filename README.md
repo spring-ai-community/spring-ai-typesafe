@@ -96,7 +96,8 @@ versions — see
 ```
 
 The whole default suite runs offline, with HTTP exercised through `MockRestServiceServer`.
-The `*IT.java` classes talk to the real API and are opt-in twice over — behind the profile
+The `*IT.java` classes talk to the live API (or to a compatible server named by
+`TYPESAFE_BASE_URL`) and are opt-in twice over — behind the profile
 *and* behind `@EnabledIfEnvironmentVariable` on `TYPESAFE_API_KEY` — so an exported key
 never turns an ordinary build into a billed one.
 

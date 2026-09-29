@@ -3,8 +3,8 @@
 [Laya](https://github.com/NandhaKishorM/laya) is an open-source (Apache-2.0) System One
 engine. Its `laya-serve` server, added in Laya 0.3.7, exposes the same `POST /v1/systemone`
 wire protocol as Jev. That means `TypeSafeClient` and everything built on it can run against a
-Laya server on your own machine, unchanged. It is useful for offline development, local
-experiments and CI without an API key.
+Laya server on your own machine, unchanged. It is useful for offline development and local
+experiments without an API key, at the cost of a model download.
 
 !!! warning "A stand-in, not a replacement"
     The protocol matches closely; the model does not. Laya's answers differ from Jev's, and
@@ -85,18 +85,16 @@ score legends and the 401 on a wrong key, behaves as it does with Jev.
 ## How it compares
 
 Running this project's [demos](../demos.md) against Laya's English checkpoint and against
-Jev, on the same inputs:
+Jev, on the same inputs. Measured on Laya 0.3.11:
 
 | Workload | Laya | Jev |
 |---|---|---|
-| Plausibility (−125 °C or −255 °C in Paris) | rated 0.66–0.74, close to plausible | rated 0.05–0.53 |
 | RAG: a passage contradicting the others | `INCLUDED` and ranked first | `CONFLICTING` |
 | Tool search on four paraphrased requests | 2 of 4 | 4 of 4 |
 | Cascade: clean invoices flagged for escalation | 2 of 3 | 0 of 3 |
 | Guardrails: a self-harm message | flagged for review | routed to support |
 
-The table shows one run. The tool search, cascade and judge results changed from run to
-run.
+The table shows one run. The tool search and cascade results changed from run to run.
 
 In short:
 
@@ -112,8 +110,9 @@ thresholds from measurements against Laya itself.
 
 ### Criteria that need world knowledge
 
-Physical plausibility is the clearest weak spot. Asked whether the values in an answer are
-physically plausible, Laya scores −125 °C and −255 °C close to 15 °C. Stating the bounds in
+Physical plausibility is the clearest weak spot. Measured on Laya 0.3.21: asked whether
+the values in an answer are physically plausible, Laya scores −125 °C and −255 °C close to
+15 °C (0.48–0.72 against 0.81), where Jev gives 0.02–0.20 against 0.97. Stating the bounds in
 the question ("is every temperature between −90 and +60 °C?") narrows the gap without
 closing it: 0.67 for 15 °C against 0.41–0.52 for the impossible values. Jev answers the same
 question 0.97 against 0.02.
@@ -133,7 +132,7 @@ TYPESAFE_BASE_URL=http://localhost:8002 TYPESAFE_API_KEY=local-test \
 ```
 
 Expect failures. Some ITs assert protocol details Laya lacks (model listing, request id,
-output tokens, error types). Others assert answers tuned on Jev.
+output tokens, error types, validation status codes). Others assert answers tuned on Jev.
 
 ## See Also
 
