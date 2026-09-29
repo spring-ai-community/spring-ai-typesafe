@@ -19,18 +19,18 @@ honouring. Every question in a call is answered against the same state in parall
 pattern is *atomic questions, composed in code* rather than one broad rubric prompt.
 
 ```java
-SystemOneResponse response = typeSafeClient.systemOne(
-        "Help! My payouts have been failing for 3 days.",
-        Map.of(
-            "is_urgent",   Noul.of("Does this convey urgency?"),
-            "department",  Choice.builder()
-                    .instructions("Which team should handle this?")
-                    .option("billing",   "Payments, invoicing, refunds")
-                    .option("technical", "Bugs, outages, integrations")
-                    .option("sales",     "Pricing, upgrades, new accounts")
-                    .build(),
-            "frustration", Score.of("How frustrated is the customer?",
-                    "Calm", "Frustrated", "Very angry")));
+SystemOneResponse response = typeSafeClient.systemOne(SystemOneRequest.builder()
+        .state("Help! My payouts have been failing for 3 days.")
+        .question("is_urgent",   Noul.of("Does this convey urgency?"))
+        .question("department",  Choice.builder()
+                .instructions("Which team should handle this?")
+                .option("billing",   "Payments, invoicing, refunds")
+                .option("technical", "Bugs, outages, integrations")
+                .option("sales",     "Pricing, upgrades, new accounts")
+                .build())
+        .question("frustration", Score.of("How frustrated is the customer?",
+                "Calm", "Frustrated", "Very angry"))
+        .build());
 
 double urgency     = response.noulValue("is_urgent");            // 0.95
 String department  = response.choiceValue("department");         // "billing"

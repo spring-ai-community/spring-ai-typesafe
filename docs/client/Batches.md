@@ -101,7 +101,7 @@ by the retry policy, but it is still a wasted round trip.
 ```java
 List<SystemOneRequest> requests = passages.stream()
         .map(passage -> SystemOneRequest.builder()
-                .state(Map.of("query", query, "passage", passage.text()))
+                .state(JsonContent.object("query", query, "passage", passage.text()))
                 .model(client.defaultModel())
                 .question("answers_query", relevanceQuestion)
                 .build())

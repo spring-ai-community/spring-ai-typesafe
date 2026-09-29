@@ -60,7 +60,7 @@ could be from a cited legal precedent:
 ```java
 JevDocumentReranker.builder(typeSafeClient)
     .question(Noul.builder()
-        .instructions(Map.of(
+        .instructions(JsonContent.object(
             "question", "Could the `passage` be the precedent cited in the `query`?",
             "focus",    "Matching holding and posture, not merely similar subject matter."))
         .whenTrue("The passage states the holding the query cites")

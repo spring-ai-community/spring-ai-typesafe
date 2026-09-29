@@ -88,8 +88,9 @@ public record SystemOneRequest(@JsonProperty("state") JsonContent state,
 
 		/**
 		 * Sets a structured state. Its fields are sent in the map's iteration order, which
-		 * can change an answer: pass a {@code LinkedHashMap}, not {@code Map.of}, whose
-		 * order changes with every JVM run.
+		 * can change an answer: pass an ordered map, or {@link JsonContent#object(Object...)}
+		 * to {@link #state(JsonContent)}, not {@code Map.of}, whose order changes with every
+		 * JVM run.
 		 * @param state the state
 		 * @return this builder
 		 */

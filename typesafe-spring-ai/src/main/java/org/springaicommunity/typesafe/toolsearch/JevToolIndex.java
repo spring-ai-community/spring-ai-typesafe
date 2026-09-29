@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.typesafe.TypeSafeClient;
+import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Question;
@@ -145,12 +146,10 @@ public class JevToolIndex implements ToolIndex {
 		questions.put(SELECTION_QUESTION, selection.build());
 		questions.put(APPLICABILITY_QUESTION, applicabilityQuestion());
 
-		// Ordered, request first: the model reads the state positionally, and Map.of's
-		// order changes with every JVM run.
-		Map<String, Object> state = new LinkedHashMap<>();
-		state.put(REQUEST_FIELD, toolSearchRequest.query());
-		state.put(TOOLS_FIELD, catalogue(candidates));
-		SystemOneResponse response = this.typeSafeClient.systemOne(state, questions);
+		// Request first: the model reads the state in order.
+		SystemOneResponse response = this.typeSafeClient.systemOne(
+				JsonContent.object(REQUEST_FIELD, toolSearchRequest.query(), TOOLS_FIELD, catalogue(candidates)),
+				questions);
 
 		double applicability = response.noulValue(APPLICABILITY_QUESTION);
 		if (applicability < this.applicabilityThreshold) {
@@ -185,10 +184,8 @@ public class JevToolIndex implements ToolIndex {
 	}
 
 	private ToolSearchResponse searchSingleCandidate(ToolSearchRequest toolSearchRequest, ToolReference only) {
-		Map<String, Object> state = new LinkedHashMap<>();
-		state.put(REQUEST_FIELD, toolSearchRequest.query());
-		state.put("tool", describe(only));
-		SystemOneResponse response = this.typeSafeClient.systemOne(state,
+		SystemOneResponse response = this.typeSafeClient.systemOne(
+				JsonContent.object(REQUEST_FIELD, toolSearchRequest.query(), "tool", describe(only)),
 				Map.of(APPLICABILITY_QUESTION,
 						Noul.builder()
 							.instructions("Does the `tool` serve the `user_request`?")
@@ -246,26 +243,21 @@ public class JevToolIndex implements ToolIndex {
 	 * The tools as data in the state, so the applicability question has something to judge
 	 * the request against.
 	 */
-	private static List<Map<String, String>> catalogue(List<ToolReference> candidates) {
-		List<Map<String, String>> catalogue = new ArrayList<>(candidates.size());
+	private static List<JsonContent> catalogue(List<ToolReference> candidates) {
+		List<JsonContent> catalogue = new ArrayList<>(candidates.size());
 		for (ToolReference candidate : candidates) {
-			Map<String, String> entry = new LinkedHashMap<>();
-			entry.put("name", candidate.toolName());
-			entry.put("does", describe(candidate));
-			catalogue.add(entry);
+			catalogue.add(JsonContent.object("name", candidate.toolName(), "does", describe(candidate)));
 		}
 		return catalogue;
 	}
 
 	private static Noul applicabilityQuestion() {
-		// Ordered, question first, for the same reason as the state.
-		Map<String, String> instructions = new LinkedHashMap<>();
-		instructions.put("question", "Does any tool listed in `available_tools` do what the `user_request` needs?");
-		instructions.put("inspect", "available_tools");
-		instructions.put("focus", "Whether some listed tool performs the action the request calls for. A request "
-				+ "that is merely about a similar subject is not the same as one a listed tool can carry out.");
 		return Noul.builder()
-			.instructions(instructions)
+			.instructions(JsonContent.object("question",
+					"Does any tool listed in `available_tools` do what the `user_request` needs?", "inspect",
+					"available_tools", "focus",
+					"Whether some listed tool performs the action the request calls for. A request that is "
+							+ "merely about a similar subject is not the same as one a listed tool can carry out."))
 			.whenTrue("Some tool in the list performs what the request asks for")
 			.whenFalse("The request needs an action that no tool in the list performs, or needs no tool at all")
 			.build();

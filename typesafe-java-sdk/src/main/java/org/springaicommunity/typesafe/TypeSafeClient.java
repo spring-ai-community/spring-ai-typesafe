@@ -146,8 +146,9 @@ public class TypeSafeClient {
 	 * position inside a serialized blob.
 	 * <p>
 	 * The fields and questions are sent in the maps' iteration order, which can change an
-	 * answer. Pass ordered maps ({@code LinkedHashMap}, or {@link SystemOneRequest#builder()}):
-	 * {@code Map.of} iterates in an order that changes with every JVM run.
+	 * answer. Pass ordered maps, or use {@link JsonContent#object(Object...)} for the state
+	 * and {@link SystemOneRequest#builder()} for the questions: {@code Map.of} iterates in
+	 * an order that changes with every JVM run.
 	 * @param state the content to evaluate
 	 * @param questions the questions, keyed by the names their answers will carry
 	 * @return the answers

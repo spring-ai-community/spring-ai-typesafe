@@ -19,6 +19,7 @@ package org.springaicommunity.typesafe;
 
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +27,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.json.JsonMapper;
+
+import org.springframework.util.Assert;
 
 /**
  * The polymorphic JSON payload that the Jev API accepts wherever the documentation refers
@@ -79,6 +82,39 @@ public record JsonContent(@JsonValue @Nullable Object value) {
 			return content;
 		}
 		return value == null ? NULL : new JsonContent(value);
+	}
+
+	/**
+	 * A JSON object whose keys keep the order they are written in:
+	 * {@code JsonContent.object("question", "...", "inspect", "message")}.
+	 *
+	 * <p>
+	 * Use it instead of {@code Map.of} for a state, structured instructions or a criteria
+	 * description with more than one key. The model reads them in the order they are sent,
+	 * and a different order can change an answer; {@code Map.of} iterates in an order that
+	 * changes with every JVM run, so the same code would send a different request each
+	 * time.
+	 * @param keysAndValues alternating keys and values; each key a non-empty
+	 * {@code String}, each value anything a {@code JsonContent} can wrap, or {@code null}
+	 * for a JSON {@code null}
+	 * @return the object, backed by an unmodifiable insertion-ordered map
+	 * @throws IllegalArgumentException when the arguments are not key-value pairs, a key is
+	 * not a non-empty string, or a key repeats
+	 */
+	public static JsonContent object(@Nullable Object... keysAndValues) {
+		Assert.notNull(keysAndValues, "keysAndValues must not be null");
+		Assert.isTrue(keysAndValues.length % 2 == 0,
+				"keysAndValues must alternate keys and values, but has an odd number of arguments");
+		Map<String, @Nullable Object> object = new LinkedHashMap<>();
+		for (int i = 0; i < keysAndValues.length; i += 2) {
+			Object key = keysAndValues[i];
+			int position = i / 2;
+			Assert.isTrue(key instanceof String name && !name.isEmpty(),
+					() -> "key at position " + position + " must be a non-empty String, but was " + key);
+			Assert.isTrue(!object.containsKey(key), () -> "duplicate key '" + key + "'");
+			object.put((String) key, keysAndValues[i + 1]);
+		}
+		return new JsonContent(Collections.unmodifiableMap(object));
 	}
 
 	/**

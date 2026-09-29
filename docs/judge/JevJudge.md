@@ -203,9 +203,9 @@ criterion can tell "no evidence" from "evidence that says nothing". The constant
 For anything that is not a question-and-answer pair, pass the state yourself:
 
 ```java
-JevVerdict verdict = judge.judge(JsonContent.of(Map.of(
+JevVerdict verdict = judge.judge(JsonContent.object(
         "passage", retrievedText,
-        "claim",   claimUnderTest)));
+        "claim",   claimUnderTest));
 ```
 
 ## Code criteria

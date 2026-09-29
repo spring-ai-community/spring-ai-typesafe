@@ -143,12 +143,12 @@ cost almost nothing extra: the service reads the state once and answers every qu
 the call in parallel, so a third question is far cheaper than a third call.
 
 ```java
-Map<String, Question> questions = Map.of(
-    "helpfulness",  helpfulnessRubric,   // Score
-    "is_plausible", plausibilityCheck,   // Noul
-    "is_grounded",  groundednessCheck);  // Noul
-
-SystemOneResponse response = client.systemOne(state, questions);
+SystemOneResponse response = client.systemOne(SystemOneRequest.builder()
+    .state(state)
+    .question("helpfulness",  helpfulnessRubric)    // Score
+    .question("is_plausible", plausibilityCheck)    // Noul
+    .question("is_grounded",  groundednessCheck)    // Noul
+    .build());
 ```
 
 ```mermaid
@@ -194,20 +194,25 @@ switch (response.choiceValue("department")) {
 `state`, `instructions` and every `criteria` description accept a string, a JSON object, a
 JSON array or `null` — the documentation's `EntryType`. That union is modelled as
 `JsonContent`, and every builder method is overloaded for `String`, `Map`, `List` and
-`JsonContent`:
+`JsonContent`. For a JSON object, `JsonContent.object(...)` keeps the keys in the order you
+write them:
 
 ```java
 Noul.builder()
-    .instructions(Map.of(
+    .instructions(JsonContent.object(
         "question", "Does the `message` ask the recipient to disclose a credential?",
         "inspect",  "message",
         "focus",    "A request to send the credential, not to reset it."))
-    .whenTrue(Map.of(
+    .whenTrue(JsonContent.object(
         "what",     "Asks the recipient to reply with a password, PIN or one-time code",
         "examples", List.of("Reply with your password", "Send us the 6-digit code")))
     .whenFalse("No sensitive credential is requested")
     .build();
 ```
+
+The model reads these in the order they are sent, so prefer `JsonContent.object` to
+`Map.of`, whose order changes with every JVM run. See
+[Key order matters](../client/TypeSafeClient.md#key-order-matters).
 
 Naming a field of the state in the instructions (`inspect: "message"`) is how you point a
 question at one part of a structured state instead of the whole thing.
@@ -222,7 +227,7 @@ record Money(String currency, long cents) {
     @JsonValue String toJson() { return currency + " " + cents; }
 }
 
-client.systemOne(Map.of("invoice", invoice, "paid", new Money("EUR", 1250)), questions);
+client.systemOne(JsonContent.object("invoice", invoice, "paid", new Money("EUR", 1250)), questions);
 // state -> {"invoice": {...}, "paid": "EUR 1250"}
 ```
 

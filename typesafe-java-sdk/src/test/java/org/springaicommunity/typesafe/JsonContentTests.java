@@ -26,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 /**
  * The {@code EntryType} union the API uses for {@code state}, {@code instructions} and
@@ -47,6 +49,44 @@ class JsonContentTests {
 	void serializesAnObjectAsAJsonObject() {
 		JsonContent content = JsonContent.of(Map.of("question", "Does this convey urgency?"));
 		assertThat(mapper.writeValueAsString(content)).isEqualTo("{\"question\":\"Does this convey urgency?\"}");
+	}
+
+	@Test
+	void buildsAnObjectThatKeepsTheOrderItsKeysAreWrittenIn() {
+		JsonContent content = JsonContent.object("question", "Does the `message` ask for a password?", "inspect",
+				"message", "focus", "A request to send it, not to reset it.");
+
+		assertThat(mapper.writeValueAsString(content))
+			.isEqualTo("{\"question\":\"Does the `message` ask for a password?\",\"inspect\":\"message\","
+					+ "\"focus\":\"A request to send it, not to reset it.\"}");
+		assertThat(content.asMap().keySet()).containsExactly("question", "inspect", "focus");
+	}
+
+	@Test
+	void nestsAndAcceptsNullValuesInAnObject() {
+		JsonContent content = JsonContent.object("ticket", JsonContent.object("id", 7, "sender", null), "tags",
+				List.of("billing"));
+
+		assertThat(mapper.writeValueAsString(content))
+			.isEqualTo("{\"ticket\":{\"id\":7,\"sender\":null},\"tags\":[\"billing\"]}");
+	}
+
+	@Test
+	void anObjectIsUnmodifiable() {
+		assertThatExceptionOfType(UnsupportedOperationException.class)
+			.isThrownBy(() -> JsonContent.object("a", 1).asMap().put("b", 2));
+	}
+
+	@Test
+	void rejectsAnObjectThatIsNotKeyValuePairs() {
+		assertThatIllegalArgumentException().isThrownBy(() -> JsonContent.object("question"))
+			.withMessageContaining("odd number");
+		assertThatIllegalArgumentException().isThrownBy(() -> JsonContent.object(1, "one"))
+			.withMessageContaining("position 0 must be a non-empty String");
+		assertThatIllegalArgumentException().isThrownBy(() -> JsonContent.object("a", 1, "", 2))
+			.withMessageContaining("position 1");
+		assertThatIllegalArgumentException().isThrownBy(() -> JsonContent.object("a", 1, "a", 2))
+			.withMessageContaining("duplicate key 'a'");
 	}
 
 	@Test

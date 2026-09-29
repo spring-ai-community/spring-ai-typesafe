@@ -27,6 +27,7 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.JevBatchOptions;
 import org.springaicommunity.typesafe.JevBatchResult;
+import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.TypeSafeClient;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.response.SystemOneResponse;
@@ -112,7 +113,7 @@ public class JevDocumentReranker implements DocumentPostProcessor {
 		List<org.springaicommunity.typesafe.question.SystemOneRequest> requests = new ArrayList<>(documents.size());
 		for (Document document : documents) {
 			requests.add(org.springaicommunity.typesafe.question.SystemOneRequest.builder()
-				.state(JevDocumentFilter.state(query.text(), text(document)))
+				.state(JsonContent.object(QUERY_FIELD, query.text(), PASSAGE_FIELD, text(document)))
 				.model(this.typeSafeClient.defaultModel())
 				.question(QUESTION_NAME, this.question)
 				.build());
@@ -192,7 +193,7 @@ public class JevDocumentReranker implements DocumentPostProcessor {
 	public static final class Builder {
 
 		private static final Noul DEFAULT_QUESTION = Noul.builder()
-			.instructions(JevDocumentFilter.instructions("Could the `passage` answer the `query`?",
+			.instructions(JsonContent.object("question", "Could the `passage` answer the `query`?", "focus",
 					"Whether the passage states information that answers the query, not merely whether "
 							+ "it covers the same subject."))
 			.whenTrue("The passage contains information that answers the query")

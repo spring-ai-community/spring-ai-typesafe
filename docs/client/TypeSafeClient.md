@@ -67,10 +67,7 @@ Four overloads differ only in the shape of the state:
 client.systemOne("Help! My payouts have been failing.", questions);
 
 // A JSON object — name fields in your instructions to point a question at one of them
-Map<String, Object> state = new LinkedHashMap<>();
-state.put("sender", sender);
-state.put("message", body);
-client.systemOne(state, questions);
+client.systemOne(JsonContent.object("sender", sender, "message", body), questions);
 
 // A JSON array, for a thread or a list
 client.systemOne(List.of("Hi", "My card was charged twice."), questions);
@@ -103,13 +100,26 @@ answer. On hosted Jev the effect is small; on some compatible servers, such as
 [Laya](Laya.md), it can flip a decision.
 
 `Map.of` iterates in an order that changes with every JVM run, so the same code can send a
-different request each time. Build multi-key maps in a fixed order instead:
+different request each time. Build multi-key content in a fixed order instead:
 
+- **State, structured instructions and criteria descriptions:**
+  `JsonContent.object(key, value, ...)` keeps the keys in the order you write them. Put the
+  part the question is about first, such as the request before a catalogue, or the question
+  before its hints.
 - **Questions:** `SystemOneRequest.builder().question(name, q)`, or a `LinkedHashMap`.
-- **State and structured instructions:** a `LinkedHashMap`, with the part the question is
-  about first, such as the request before a catalogue, or the question before its hints.
 - **Options and levels:** `Choice.builder().option(...)` and `Score.builder().level(...)`
   already keep declaration order.
+
+```java
+client.systemOne(SystemOneRequest.builder()
+        .state(JsonContent.object("user_request", request, "available_tools", tools))
+        .question("any_tool_applies", Noul.builder()
+                .instructions(JsonContent.object(
+                        "question", "Does any tool in `available_tools` do what `user_request` needs?",
+                        "inspect",  "available_tools"))
+                .build())
+        .build());
+```
 
 The SDK's own components (the judge, the RAG post-processors, the tool index and
 `JevChatModel`) build their requests in a fixed order.
