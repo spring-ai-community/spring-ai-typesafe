@@ -1,6 +1,6 @@
 # Examples
 
-Eight runnable entry points. Run `mvn install -DskipTests` from the reactor root first, so the
+Nine runnable entry points. Run `mvn install -DskipTests` from the reactor root first, so the
 other modules are resolvable; `spring-boot:run` is a single-module goal, so it takes
 `-pl examples` without `-am`.
 
@@ -13,9 +13,10 @@ other modules are resolvable; `spring-boot:run` is a single-module goal, so it t
 | [`CascadeDemo`](#cascadedemo) | Jev as the gate in a cheap-model-first cascade | `TYPESAFE_API_KEY` |
 | [`GuardrailDemo`](#guardraildemo) | screening a turn in both directions | `TYPESAFE_API_KEY` |
 | [`ModelJudgeDemoApplication`](#modeljudgedemoapplication) | the self-refine judge loop | both keys |
+| [`EscalatingJudgeDemoApplication`](#escalatingjudgedemoapplication) | accept when confident, escalate when unsure | both keys |
 | [`OllamaSystemOneDemoApplication`](#ollamasystemonedemoapplication) | the same client against a local Ollama | no key, Ollama 0.35+ |
 
-Only `ModelJudgeDemoApplication` needs `ANTHROPIC_API_KEY`, and the Ollama demo needs no key at all.
+Only `ModelJudgeDemoApplication` and `EscalatingJudgeDemoApplication` need `ANTHROPIC_API_KEY`, and the Ollama demo needs no key at all.
 
 ## `JevQuickstart`
 
@@ -214,6 +215,33 @@ a question with one job, so it does not.
 
 Both need a real API key. `WeatherJudgeTests` exercises the same judge offline against
 `MockRestServiceServer`, including the impossible-temperature case.
+
+## `EscalatingJudgeDemoApplication`
+
+Accept when confident, escalate when unsure. Jev judges four answers to arithmetic questions
+on three criteria, and the criteria it is unsure about are escalated to Claude, which
+decides them and says why. The same answers are judged by Jev alone alongside, so each line
+shows what escalating changed.
+
+```bash
+export TYPESAFE_API_KEY=... ANTHROPIC_API_KEY=...
+mvn -pl examples spring-boot:run \
+    -Dspring-boot.run.main-class=org.springaicommunity.typesafe.demo.escalation.EscalatingJudgeDemoApplication
+```
+
+```
+Q: A shop sells pens at 3 for 2.40. How much do 7 pens cost?
+A: Three pens cost 2.40, so six pens cost 4.80. One more pen at the single price of 0.80 makes 5…
+  is_correct   jev FAILED   0.32   cascade FAILED   escalated: Each pen costs 2.40/3 = 0.80, so 7 pens cost 7 ×…
+  is_grounded  jev FAILED   0.19   cascade FAILED   escalated: The assistant introduces a claim that shops 'usu…
+  helpfulness  jev PASSED   1.96   cascade FAILED   escalated: The assistant correctly computes the unit price …
+
+12 criteria: 5 escalated to the chat model, 3 verdicts changed.
+```
+
+Jev is sure of the terse right answer and of the plainly wrong parts, and those verdicts are
+kept at no extra cost. What it escalates is the fluent working that ends wrong, and there
+the chat model overturns Jev's `helpfulness` pass.
 
 ## `OllamaSystemOneDemoApplication`
 

@@ -1,6 +1,6 @@
 # Demos
 
-Eight runnable entry points in `examples`. Run `mvn install -DskipTests` from the reactor root
+Nine runnable entry points in `examples`. Run `mvn install -DskipTests` from the reactor root
 first, so the other modules are resolvable; `spring-boot:run` is a single-module goal, so it
 takes `-pl examples` **without** `-am`.
 
@@ -20,8 +20,9 @@ Only `ModelJudgeDemoApplication` and `EscalatingJudgeDemoApplication` need `ANTH
 
 !!! tip "Running the demos against Laya"
     The plain demos build their client with `TypeSafeClient.builder()`, so they follow
-    `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY`. The Spring Boot demo reads
-    `SPRING_AI_TYPESAFE_BASE_URL` and `SPRING_AI_TYPESAFE_API_KEY`. Pointed at a local
+    `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY`. `ModelJudgeDemoApplication` and
+    `EscalatingJudgeDemoApplication` read `SPRING_AI_TYPESAFE_BASE_URL` and
+    `SPRING_AI_TYPESAFE_API_KEY`. Pointed at a local
     [Laya](client/Laya.md) server, they run, but the answers differ from Jev's; see
     [how it compares](client/Laya.md#how-it-compares). `JevQuickstart` stops at
     `listModels()`, since Laya has no `/v1/models`, and the Model-as-a-judge demo is not a
