@@ -84,13 +84,18 @@ public record JevVerdict(boolean passed, List<JevFinding> findings, @Nullable Sy
 
 	/**
 	 * A one line summary suitable for a log, for example
-	 * {@code passed=false [helpfulness=FAILED, is_plausible=FAILED(escalated)]}.
+	 * {@code passed=false [helpfulness=FAILED, is_plausible=FAILED(escalated)]}. A
+	 * criterion whose escalation failed reads {@code (escalation failed)}.
 	 * @return the summary
 	 */
 	public String summary() {
 		String perCriterion = this.findings.stream()
 			.map(finding -> "%s=%s%s".formatted(finding.name(), finding.outcome(),
-					finding.escalated() ? "(escalated)" : ""))
+					switch (finding.escalation()) {
+						case NONE -> "";
+						case DECIDED -> "(escalated)";
+						case FAILED -> "(escalation failed)";
+					}))
 			.reduce((a, b) -> a + ", " + b)
 			.orElse("");
 		return "passed=%s [%s]".formatted(this.passed, perCriterion);

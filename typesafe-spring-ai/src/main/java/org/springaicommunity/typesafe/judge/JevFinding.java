@@ -29,12 +29,12 @@ import org.springaicommunity.typesafe.response.Answer;
  * @param outcome whether the criterion passed, failed or could not be decided
  * @param detail a sentence naming the defect, ready to be handed back to the model as
  * feedback; empty when the criterion passed
- * @param escalated whether a {@link JevEscalation} decided this criterion because Jev was
- * unsure; {@link #answer()} is then the escalation's answer
+ * @param escalation whether a {@link JevEscalation} was asked about this criterion because
+ * Jev was unsure, and how that went
  * @author Christian Tzolov
  */
 public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcome outcome, String detail,
-		boolean escalated) {
+		Escalation escalation) {
 
 	/**
 	 * A finding Jev, or a code check, decided itself.
@@ -44,7 +44,15 @@ public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcom
 	 * @param detail the defect, empty when the criterion passed
 	 */
 	public JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcome outcome, String detail) {
-		this(criterion, answer, outcome, detail, false);
+		this(criterion, answer, outcome, detail, Escalation.NONE);
+	}
+
+	/**
+	 * @return {@code true} when a {@link JevEscalation} decided this criterion;
+	 * {@link #answer()} is then the escalation's answer
+	 */
+	public boolean escalated() {
+		return this.escalation == Escalation.DECIDED;
 	}
 
 	/**
@@ -95,6 +103,26 @@ public record JevFinding(JevCriterion criterion, @Nullable Answer answer, Outcom
 		 * aside.
 		 */
 		NOT_APPLICABLE
+
+	}
+
+	/**
+	 * Whether a {@link JevEscalation} was involved in a finding.
+	 */
+	public enum Escalation {
+
+		/** Jev, or a code check, decided the criterion; no escalation was asked. */
+		NONE,
+
+		/** Jev was unsure and the escalation decided the criterion. */
+		DECIDED,
+
+		/**
+		 * Jev was unsure, but the escalation threw or answered the wrong kind of
+		 * question, so Jev's own finding stands. A cascade that fails every time is a
+		 * misconfiguration, and this is where it shows.
+		 */
+		FAILED
 
 	}
 

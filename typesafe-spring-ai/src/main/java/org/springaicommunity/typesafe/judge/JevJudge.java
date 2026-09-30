@@ -278,9 +278,11 @@ public class JevJudge {
 					+ criterion.question().typeName() + " with " + decision.answer().getClass().getSimpleName());
 		}
 		catch (RuntimeException ex) {
-			// The fallback being down says nothing about the answer: keep Jev's finding.
+			// The fallback being down says nothing about the answer: keep Jev's finding,
+			// marked, so a cascade that never works does not pass for one that does.
 			logger.warn("Escalating criterion '{}' failed, keeping Jev's finding: {}", criterion.name(), ex.toString());
-			return finding;
+			return new JevFinding(criterion, finding.answer(), finding.outcome(), finding.detail(),
+					JevFinding.Escalation.FAILED);
 		}
 		// evaluate re-adds the criterion if the escalation's answer is undecided too.
 		undecided.remove(criterion.name());
@@ -290,7 +292,7 @@ public class JevJudge {
 		if (!detail.isEmpty() && decision.reason() != null && !decision.reason().isBlank()) {
 			detail = format("%s; the escalation judge: %s", detail, decision.reason().strip());
 		}
-		return new JevFinding(criterion, decided.answer(), decided.outcome(), detail, true);
+		return new JevFinding(criterion, decided.answer(), decided.outcome(), detail, JevFinding.Escalation.DECIDED);
 	}
 
 	/**

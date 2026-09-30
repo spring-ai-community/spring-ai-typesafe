@@ -352,7 +352,8 @@ classDiagram
         +Answer answer
         +Outcome outcome
         +String detail
-        +boolean escalated
+        +Escalation escalation
+        +escalated() boolean
         +name() String
         +isFailure() boolean
     }
@@ -490,7 +491,9 @@ JevJudge judge = JevJudge.builder(typeSafeClient)
   fails, the stronger judge's reason is appended to its feedback.
 - **When the stronger judge fails:** if the escalation throws or answers the wrong kind of
   question, Jev's own finding stands and a warning is logged. A fallback outage doesn't fail
-  the call.
+  the call. The finding is marked `escalation() == FAILED` and reads
+  `(escalation failed)` in the summary, so a cascade that never works, for example because
+  of a wrong chat-model key, doesn't pass for one that does.
 - **Cost:** you pay for one call to the stronger judge per escalated criterion, and nothing
   when Jev was confident throughout. The calls are made one after another, so each one also
   adds its latency.

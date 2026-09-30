@@ -948,8 +948,9 @@ class JevJudgeTests {
 			throw new IllegalStateException("fallback down");
 		}).judge("q", "a");
 
-		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED]");
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED(escalation failed)]");
 		assertThat(verdict.escalated()).isEmpty();
+		assertThat(verdict.findings().get(0).escalation()).isEqualTo(JevFinding.Escalation.FAILED);
 	}
 
 	@Test
@@ -961,7 +962,7 @@ class JevJudgeTests {
 
 		JevVerdict verdict = escalatingJudge(escalation).judge("q", "a");
 
-		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED]");
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED(escalation failed)]");
 	}
 
 	@Test

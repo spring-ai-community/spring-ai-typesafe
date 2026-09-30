@@ -18,7 +18,7 @@
 
 | Change | Migrate |
 |---|---|
-| **`JevFinding` has a fifth component, `escalated`.** The four-argument constructor is kept. | Record patterns over `JevFinding` need the extra component. |
+| **`JevFinding` has a fifth component, `escalation`** (`NONE`, `DECIDED` or `FAILED`). The four-argument constructor is kept. | Record patterns over `JevFinding` need the extra component. |
 
 ## 0.3.0
 
