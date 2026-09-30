@@ -346,6 +346,14 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 	}
 
 	/**
+	 * A turn the guardrail refused carries its words, not the model's answer. Judging it
+	 * would fail it, and retrying it cannot help: the guardrail would refuse again.
+	 */
+	private static boolean isGuardrailRefusal(ChatClientResponse response) {
+		return response.context().containsKey(JevGuardrailAdvisor.OUTCOME_CONTEXT_KEY);
+	}
+
+	/**
 	 * A {@code returnDirect} tool hands its output straight back as the response. That is
 	 * not the model's answer, so there is nothing to judge, and a retry would re-run a
 	 * tool that may have side effects.
@@ -537,7 +545,7 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 
 		private BiPredicate<ChatClientRequest, ChatClientResponse> skipEvaluationPredicate = (request,
 				response) -> response.chatResponse() == null || response.chatResponse().hasToolCalls()
-						|| isToolResultReturnedDirectly(response);
+						|| isToolResultReturnedDirectly(response) || isGuardrailRefusal(response);
 
 		private JudgeErrorPolicy judgeErrorPolicy = JudgeErrorPolicy.FAIL_OPEN;
 

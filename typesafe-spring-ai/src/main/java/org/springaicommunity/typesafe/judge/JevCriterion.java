@@ -202,8 +202,10 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 		 *     .whenChosen("mode", "answered"))
 		 * }</pre>
 		 *
-		 * Every question is still answered in the one call, so the branch costs nothing;
-		 * when the choice lands elsewhere, or is not decided, this finding is
+		 * Every question is still answered in the one call, so the branch costs nothing.
+		 * The branch is taken when at least half of the choice's probability, and at least
+		 * the judge's {@code minConfidence}, is on the named labels; when the choice lands
+		 * elsewhere, does not settle, or is not decided, this finding is
 		 * {@link JevFinding.Outcome#NOT_APPLICABLE}.
 		 * @param choiceCriterion the name of a choice criterion declared earlier in the
 		 * judge

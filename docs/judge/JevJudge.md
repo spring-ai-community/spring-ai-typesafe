@@ -300,9 +300,12 @@ JevJudge judge = JevJudge.builder(typeSafeClient)
 - **The branch costs nothing.** Jev answers every question in one parallel call, so
   `has_details` is asked anyway, and the dependency is resolved in Java afterwards. Other
   judge frameworks walk such a graph one model call per node.
-- When the choice lands elsewhere, the dependent is `NOT_APPLICABLE`, with detail
-  `has_details: does not apply, mode was "clarification_needed"`. It neither passes nor
-  fails.
+- **The branch follows the probability, not just the top label.** It is taken when at
+  least half of the choice's probability, and at least `minConfidence`, is on the labels
+  `whenChosen` names. A choice split 0.51 to 0.49 selects nothing.
+- When the choice lands elsewhere or doesn't settle, the dependent is `NOT_APPLICABLE`,
+  with detail `has_details: does not apply, mode was "clarification_needed"`. It neither
+  passes nor fails.
 - An undecided dependency (`INCONCLUSIVE`, `ERROR` or `NOT_APPLICABLE`) makes its dependents
   `NOT_APPLICABLE` too: nothing was selected for them to rely on.
 - `whenPassed("name")` depends on a criterion having passed. That criterion can be a

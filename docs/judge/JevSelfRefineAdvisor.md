@@ -39,7 +39,7 @@ String answer = chatClient.prompt("What is the weather in Paris?").call().conten
 | `judge(JevJudge)` | `JevJudge` | — (**required**) | What to evaluate each response against. |
 | `maxRepeatAttempts(int)` | `int` | `3` | Retries after the first attempt. Capped at `MAX_REPEAT_ATTEMPTS_LIMIT` (100). |
 | `failOnExhaustedAttempts(boolean)` | `boolean` | `false` | Throw `JevSelfRefineFailedException` instead of returning the best attempt. |
-| `skipEvaluationPredicate(BiPredicate<ChatClientRequest, ChatClientResponse>)` | — | skips tool-call responses and `returnDirect` tool results | Neither is the model's answer, so there is nothing to judge. |
+| `skipEvaluationPredicate(BiPredicate<ChatClientRequest, ChatClientResponse>)` | — | skips tool-call responses, `returnDirect` tool results and guardrail refusals | None is the model's answer, so there is nothing to judge. |
 | `judgeErrorPolicy(JudgeErrorPolicy)` | `JudgeErrorPolicy` | `FAIL_OPEN` | What to do when the judging call itself fails. See [when judging fails](#when-judging-fails). |
 | `order(int)` | `int` | `DEFAULT_ORDER` (`LOWEST_PRECEDENCE - 2000`) | Where in the advisor chain this runs; `BEFORE_TOOLS_ORDER` to re-run tools on a retry. See [where it sits](#where-it-sits-and-why). |
 
@@ -166,11 +166,11 @@ alternative of screening once per turn.
     JevGuardrailAdvisor.builder(typeSafeClient).build())          // safety, every attempt
 ```
 
-Retrying does not help a guardrail: an unsafe answer is not a draft. At these default orders,
-an input the guardrail blocks comes back as the refusal, which the judge then scores, and
-typically fails. So a blocked request can cost up to `maxRepeatAttempts` further rounds of
-screening and judging before the refusal is returned. Ordering the guardrail outside the
-self-refine advisor avoids that.
+Retrying does not help a guardrail: an unsafe answer is not a draft. So a turn the guardrail
+refuses is final. The refusal is marked in the response context
+(`JevGuardrailAdvisor.OUTCOME_CONTEXT_KEY`), and the default `skipEvaluationPredicate` does
+not judge or retry it. A custom predicate replaces that default, so keep the check if you
+write your own.
 
 ## Streaming
 

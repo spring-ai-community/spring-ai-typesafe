@@ -16,7 +16,9 @@
 
 package org.springaicommunity.typesafe.advisor;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -78,6 +80,14 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 
 	/** What a blocked turn says when the caller has not supplied wording. */
 	public static final String DEFAULT_REFUSAL = "I can't help with that.";
+
+	/**
+	 * The response-context key a refused turn carries, holding the name of the
+	 * {@link JevGuardrail.Outcome} that refused it. It marks the response as the
+	 * guardrail's own words rather than the model's answer, so an advisor further out,
+	 * such as {@link JevSelfRefineAdvisor}, does not judge a refusal or retry it.
+	 */
+	public static final String OUTCOME_CONTEXT_KEY = "jev.guardrail.outcome";
 
 	/** What a turn routed to support says when the caller has not supplied wording. */
 	public static final String DEFAULT_SUPPORT_MESSAGE = "It sounds like you may be going through something "
@@ -177,7 +187,9 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 	private ChatClientResponse refuse(ChatClientRequest request, JevGuardrail.Verdict verdict) {
 		String text = verdict.outcome() == JevGuardrail.Outcome.SUPPORT ? this.supportMessage : this.refusal;
 		ChatResponse chatResponse = new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
-		return ChatClientResponse.builder().chatResponse(chatResponse).context(request.context()).build();
+		Map<String, Object> context = new HashMap<>(request.context());
+		context.put(OUTCOME_CONTEXT_KEY, verdict.outcome().name());
+		return ChatClientResponse.builder().chatResponse(chatResponse).context(context).build();
 	}
 
 	private static String answerOf(ChatClientResponse response) {

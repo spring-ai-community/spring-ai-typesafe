@@ -642,6 +642,38 @@ class JevJudgeTests {
 	}
 
 	@Test
+	void doesNotTakeABranchOnACoinFlipBetweenAcceptedOptions() {
+		// Both options are accepted, so "mode" passes with full support and is never
+		// undecided. The branch is another matter: 0.51 against 0.49 selects nothing.
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "mode":{"type":"choice","choice":"answered",
+				    "probabilities":{"answered":0.51,"clarification_needed":0.49},"confidence":0.02},
+				  "has_details":{"type":"noul","noul":0.05}
+				},"usage":{}}""");
+
+		JevVerdict verdict = branchingJudge().judge("Weather in Springfield?", "Which Springfield? Or: 20 C.");
+
+		assertThat(verdict.summary()).isEqualTo("passed=true [mode=PASSED, has_details=NOT_APPLICABLE]");
+		assertThat(verdict.notApplicable().get(0).detail())
+			.isEqualTo("has_details: does not apply, mode did not settle on [answered] (0.51 of the probability)");
+	}
+
+	@Test
+	void takesABranchOnAClearMajorityForItsLabels() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "mode":{"type":"choice","choice":"answered",
+				    "probabilities":{"answered":0.8,"clarification_needed":0.2},"confidence":0.6},
+				  "has_details":{"type":"noul","noul":0.05}
+				},"usage":{}}""");
+
+		JevVerdict verdict = branchingJudge().judge("Weather in Paris?", "Nice.");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [mode=PASSED, has_details=FAILED]");
+	}
+
+	@Test
 	void rejectsADependencyOnACriterionNotYetDeclared() {
 		assertThatIllegalArgumentException()
 			.isThrownBy(() -> JevJudge.builder(this.mock.client())

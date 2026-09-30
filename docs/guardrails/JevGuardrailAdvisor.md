@@ -209,10 +209,11 @@ once per turn:
 To screen once per turn instead, order the guardrail *outside* the self-refine advisor, for
 example `.order(BaseAdvisor.HIGHEST_PRECEDENCE + 150)`. It then sees the original request and
 the answer the turn finally settled on, and a refusal it returns cannot be retried away. The
-cost: an unsafe draft reaches the judge and costs a retry before it is caught. The default
-has a cost of its own: a blocked input returns the refusal, which the judge then scores and
-typically fails, so a blocked request can cost up to `maxRepeatAttempts` further rounds of
-screening and judging.
+cost: an unsafe draft reaches the judge and costs a retry before it is caught.
+
+Either way a refusal is final. The refused response carries
+`JevGuardrailAdvisor.OUTCOME_CONTEXT_KEY` in its context, holding the outcome's name, and
+the self-refine advisor's default `skipEvaluationPredicate` neither judges nor retries it.
 
 ## Custom batteries
 

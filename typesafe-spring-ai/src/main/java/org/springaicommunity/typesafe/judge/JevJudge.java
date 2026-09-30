@@ -233,7 +233,7 @@ public class JevJudge {
 	/**
 	 * @return why the dependency is not met, or {@code null} when it is
 	 */
-	private static @Nullable String unmetDependency(JevCriterion.Dependency dependency, JevFinding target,
+	private @Nullable String unmetDependency(JevCriterion.Dependency dependency, JevFinding target,
 			boolean targetUndecided) {
 		if (dependency.chosen().isEmpty()) {
 			return target.outcome() == JevFinding.Outcome.PASSED ? null
@@ -243,12 +243,38 @@ public class JevJudge {
 		// nothing a dependent could rely on.
 		boolean decided = !targetUndecided && (target.outcome() == JevFinding.Outcome.PASSED
 				|| target.outcome() == JevFinding.Outcome.FAILED);
-		if (decided && target.answer() instanceof ChoiceAnswer choice && dependency.chosen().contains(choice.value())) {
+		if (!decided || !(target.answer() instanceof ChoiceAnswer choice)) {
+			return format("%s was %s", dependency.criterion(), target.outcome());
+		}
+		// The branch follows the probability on the labels it names, by the same rule that
+		// decides a choice: at least half, and clearly enough. The top label alone is not
+		// enough; at 0.51 against 0.49 a dependent would be judged on a coin flip.
+		double share = chosenShare(dependency, choice);
+		if (share >= 0.5d && share >= this.minConfidence) {
 			return null;
 		}
-		return target.answer() instanceof ChoiceAnswer choice && decided
-				? format("%s was \"%s\"", dependency.criterion(), choice.value())
-				: format("%s was %s", dependency.criterion(), target.outcome());
+		return dependency.chosen().contains(choice.value()) || 1.0d - share < this.minConfidence
+				? format("%s did not settle on %s (%.2f of the probability)", dependency.criterion(),
+						dependency.chosen(), share)
+				: format("%s was \"%s\"", dependency.criterion(), choice.value());
+	}
+
+	/**
+	 * @return the share of the choice's probability on the labels the dependency names;
+	 * without probabilities, all or nothing by the selected label
+	 */
+	private static double chosenShare(JevCriterion.Dependency dependency, ChoiceAnswer choice) {
+		double total = total(choice.probabilities().values());
+		if (total <= 0.0d) {
+			return dependency.chosen().contains(choice.value()) ? 1.0d : 0.0d;
+		}
+		double chosen = 0.0d;
+		for (Map.Entry<String, Double> entry : choice.probabilities().entrySet()) {
+			if (dependency.chosen().contains(entry.getKey())) {
+				chosen += entry.getValue();
+			}
+		}
+		return chosen / total;
 	}
 
 	private static JevJudgeInput requireInput(@Nullable JevJudgeInput input) {
