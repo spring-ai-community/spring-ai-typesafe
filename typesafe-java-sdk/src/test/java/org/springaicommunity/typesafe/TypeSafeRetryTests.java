@@ -224,6 +224,39 @@ class TypeSafeRetryTests {
 		this.mock.server().verify();
 	}
 
+	@Test
+	void doesNotAssumeATimeoutForATransportItDidNotBuild() {
+		// The transport is the caller's and no timeout was declared, so nothing is known
+		// about how long an attempt may take. Assuming the 10s default would exceed this
+		// 5s budget and refuse a retry that, after an instant 429, plainly fits.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.errorResponse(429, "rate limited"));
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.jsonResponse(OK_BODY));
+
+		RetryPolicy policy = RetryPolicy.builder()
+			.maxRetries(2)
+			.initialBackoff(Duration.ofMillis(1))
+			.jitter(0.0d)
+			.totalTimeout(Duration.ofSeconds(5))
+			.build();
+		TypeSafeClient client = this.mock.clientBuilder().retryPolicy(policy).build();
+
+		assertThat(client.timeout()).isNull();
+		assertThat(client.systemOne("anything", Map.of("probe", Noul.of("Is this a probe?"))).noulValue("probe"))
+			.isEqualTo(0.5);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void usesTheDefaultTimeoutForATransportItBuilds() {
+		TypeSafeClient client = TypeSafeClient.builder().apiKey("test-api-key").build();
+
+		assertThat(client.timeout()).isEqualTo(TypeSafeConstants.DEFAULT_TIMEOUT);
+	}
+
 	private SystemOneResponse evaluate(RetryPolicy retryPolicy) {
 		return this.mock.client(retryPolicy).systemOne("anything", Map.of("probe", Noul.of("Is this a probe?")));
 	}

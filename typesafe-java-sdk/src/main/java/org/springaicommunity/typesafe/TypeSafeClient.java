@@ -128,6 +128,23 @@ public class TypeSafeClient {
 		this.defaultModel = defaultModel;
 		this.retryPolicy = retryPolicy;
 		this.perAttemptTimeout = perAttemptTimeout;
+		warnWhenNoRetryCanFit(retryPolicy, perAttemptTimeout);
+	}
+
+	/**
+	 * A retry is only started when the budget can still absorb a whole attempt, so a
+	 * per-attempt timeout at or above the budget means nothing is ever retried, not even
+	 * an instant 429. That is a configuration mistake worth saying out loud once, rather
+	 * than a debug line per call.
+	 */
+	private static void warnWhenNoRetryCanFit(RetryPolicy retryPolicy, @Nullable Duration perAttemptTimeout) {
+		Duration budget = retryPolicy.totalTimeout();
+		if (retryPolicy.maxRetries() > 0 && budget != null && perAttemptTimeout != null
+				&& perAttemptTimeout.compareTo(budget) >= 0) {
+			logger.warn("The per-attempt timeout ({}) is not below the retry budget ({}), so no retry can ever "
+					+ "fit in it and failures will not be retried. Raise RetryPolicy.totalTimeout, or lower the "
+					+ "timeout.", perAttemptTimeout, budget);
+		}
 	}
 
 	/**
@@ -459,7 +476,8 @@ public class TypeSafeClient {
 
 		private @Nullable String defaultModel;
 
-		private Duration timeout = TypeSafeConstants.DEFAULT_TIMEOUT;
+		/** {@code null} until declared; see {@link #timeout(Duration)}. */
+		private @Nullable Duration timeout;
 
 		private RetryPolicy retryPolicy = RetryPolicy.defaults();
 
@@ -502,11 +520,14 @@ public class TypeSafeClient {
 		}
 
 		/**
-		 * Sets the per operation HTTP timeout. Not applied to the transport when
-		 * {@link #restClientBuilder(RestClient.Builder)} supplies it, since that builder
-		 * then owns its own timeouts — but it is still counted against
-		 * {@link RetryPolicy#totalTimeout()} before each retry, so declare the transport's
-		 * real timeout here even when supplying your own builder.
+		 * Sets the per operation HTTP timeout; {@link TypeSafeConstants#DEFAULT_TIMEOUT} when
+		 * the client builds its own transport and none is set. Not applied to the transport
+		 * when {@link #restClientBuilder(RestClient.Builder)} or
+		 * {@link #typeSafeApi(TypeSafeApi)} supplies it, since that transport then owns its
+		 * own timeouts — but it is still counted against {@link RetryPolicy#totalTimeout()}
+		 * before each retry, so declare the transport's real timeout here. Left undeclared
+		 * with a transport of your own, the timeout is unknown and the budget bounds only the
+		 * waits between attempts.
 		 * @param timeout the timeout
 		 * @return this builder
 		 */
@@ -581,10 +602,15 @@ public class TypeSafeClient {
 			String url = firstNonBlank(this.baseUrl, System.getenv(TypeSafeConstants.BASE_URL_ENV),
 					TypeSafeConstants.DEFAULT_BASE_URL);
 
+			// Only a transport built here is known to use the default timeout. Assuming it
+			// for a caller's own transport would count ten seconds that may not exist
+			// against the retry budget, and silently disable retries under a tighter one.
+			Duration perAttemptTimeout = this.timeout;
 			RestClient.Builder transport = this.restClientBuilder;
 			if (transport == null) {
+				perAttemptTimeout = (this.timeout != null) ? this.timeout : TypeSafeConstants.DEFAULT_TIMEOUT;
 				JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
-				requestFactory.setReadTimeout(this.timeout);
+				requestFactory.setReadTimeout(perAttemptTimeout);
 				transport = RestClient.builder().requestFactory(requestFactory);
 			}
 
@@ -599,7 +625,7 @@ public class TypeSafeClient {
 				.restClientBuilder(transport)
 				.build();
 
-			return new TypeSafeClient(api, model, this.retryPolicy, this.timeout);
+			return new TypeSafeClient(api, model, this.retryPolicy, perAttemptTimeout);
 		}
 
 		private static String firstNonBlank(String... candidates) {

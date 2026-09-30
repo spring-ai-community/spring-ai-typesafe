@@ -117,8 +117,14 @@ TypeSafeClient client = TypeSafeClient.builder().retryPolicy(policy).build();
     so a call never overruns the budget by a whole request. When the time left cannot fit
     another attempt, the last failure is thrown instead.
 
-    Declare the transport's real timeout with `timeout(...)` even when you supply your own
-    `RestClient.Builder`, since that is the figure the budget uses.
+    So keep the per-attempt timeout well below the budget. With a timeout at or above it,
+    no retry can ever fit and nothing is retried, not even an instant 429; the client logs
+    a warning when it is built that way.
+
+    Declare the transport's real timeout with `timeout(...)` when you supply your own
+    `RestClient.Builder`, since that is the figure the budget uses. Left undeclared, the
+    timeout of your transport is unknown, and the budget bounds only the waits between
+    attempts.
 
 ## Request ids
 
