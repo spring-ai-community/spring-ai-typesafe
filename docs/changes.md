@@ -1,5 +1,16 @@
 # Changes
 
+## 0.4.0 (unreleased)
+
+### New
+
+- **`decision-test`:** AssertJ assertions that judge an answer against plain-language
+  criteria in one Jev call, with `assertThatAnswer(answer).satisfies(...).judge()`, and
+  failure messages that quote each criterion that did not pass. Also included:
+  assertions on verdicts, responses and consistency reports, and a `@DecisionTest` extension
+  that skips without an API key and supplies the client. See
+  [DecisionAssertions](testing/DecisionAssertions.md).
+
 ## 0.3.0
 
 Requests now go out in the same order on every run, retries and RAG screening no longer

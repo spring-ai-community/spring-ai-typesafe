@@ -66,6 +66,8 @@ nav:
     - JevConfidenceGate: patterns/JevConfidenceGate.md
     - JevConsistency: patterns/JevConsistency.md
     - JevCompositeScore: patterns/JevCompositeScore.md
+  - Testing:
+    - DecisionAssertions (experimental): testing/DecisionAssertions.md
   - Demos: demos.md
   - Changes: changes.md
 

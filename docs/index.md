@@ -50,7 +50,8 @@ spring-ai-typesafe/
 ├── typesafe-java-sdk/            # The client: TypeSafeClient, questions, answers, errors, batches
 ├── typesafe-spring-ai/           # Judge, advisors, RAG post-processors, tool index
 ├── spring-ai-starter-typesafe/   # spring.ai.typesafe.* properties and a TypeSafeClient bean
-├── typesafe-bom/                 # Bill of materials for the three above
+├── decision-test/                # AssertJ assertions and @DecisionTest, for judging answers in tests
+├── typesafe-bom/                 # Bill of materials for the four above
 └── examples/                     # Eight runnable demos
 ```
 

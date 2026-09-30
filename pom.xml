@@ -78,6 +78,7 @@
 		<module>typesafe-java-sdk</module>
 		<module>spring-ai-starter-typesafe</module>
 		<module>typesafe-spring-ai</module>
+		<module>decision-test</module>
 		<module>typesafe-bom</module>
 		<module>examples</module>
 	</modules>
@@ -118,6 +119,11 @@
 			<dependency>
 				<groupId>org.springaicommunity</groupId>
 				<artifactId>typesafe-spring-ai</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.springaicommunity</groupId>
+				<artifactId>decision-test</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 		</dependencies>

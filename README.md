@@ -48,7 +48,8 @@ The three primitives — `Noul`, `Choice` and `Score` — are described in
 | `typesafe-java-sdk` | The client: `TypeSafeClient`, the question/answer model, retries, batches, typed exceptions. No Spring AI dependency. |
 | `typesafe-spring-ai` | `JevJudge`, the advisors, and the RAG and tool-search integrations, on Spring AI's own SPIs |
 | `spring-ai-starter-typesafe` | `spring.ai.typesafe.*` properties and an auto-configured `TypeSafeClient` bean |
-| `typesafe-bom` | Bill of materials for the three above |
+| `decision-test` | AssertJ assertions that judge an answer inside a test, and the `@DecisionTest` JUnit extension |
+| `typesafe-bom` | Bill of materials for the four above |
 | `examples` | Eight runnable demos |
 
 ## Quick start
@@ -92,6 +93,7 @@ versions — see
 | [JevDocumentFilter](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/rag/JevDocumentFilter/) / [JevDocumentReranker](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/rag/JevDocumentReranker/) | Triage retrieved passages, then order what survives |
 | [JevToolIndex](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/toolsearch/JevToolIndex/) | Tool selection that can answer "none of these apply" |
 | [Composing decisions](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/patterns/JevConfidenceGate/) | Confidence gates, self-consistency, weighted composite scores |
+| [DecisionAssertions](https://spring-ai-community.github.io/spring-ai-typesafe/latest-snapshot/testing/DecisionAssertions/) | `assertThatAnswer(answer).satisfies("...").judge()`: judge an answer in a test, in one call |
 
 ## Building
 
