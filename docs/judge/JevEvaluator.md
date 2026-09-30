@@ -40,7 +40,7 @@ if (!result.isPass()) {
 | `EvaluationResponse` | From |
 |---|---|
 | `isPass()` | `verdict.passed()` |
-| `getScore()` | the fraction of criteria that passed |
+| `getScore()` | the fraction of the criteria that applied which passed; `NOT_APPLICABLE` ones are left out |
 | `getFeedback()` | `verdict.feedback()` |
 | `getMetadata()` | the full `JevVerdict` and a per-criterion outcome map |
 
@@ -53,7 +53,7 @@ Map<String, String> findings =
 
 !!! note "The single score is lossy on purpose"
     `EvaluationResponse` has room for one float, while a judge holds one threshold per
-    criterion. The score is the fraction of criteria that passed, and the per-criterion
+    criterion. The score is the fraction of the applicable criteria that passed, and the per-criterion
     detail is preserved in the metadata. If that view is what you are after, call
     [`JevJudge.judge`](JevJudge.md) directly and read the `JevVerdict`.
 

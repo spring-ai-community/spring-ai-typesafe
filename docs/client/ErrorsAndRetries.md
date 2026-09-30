@@ -7,20 +7,21 @@ rather than on a status code.
 
 ```
 TypeSafeException
-└─ TypeSafeApiException          status, body, headers, endpoint, requestId,
-   │                             errorType, errorMessage, validationErrors
-   ├─ TypeSafeBadRequestException              400
-   ├─ TypeSafeAuthenticationException          401
-   ├─ TypeSafePermissionDeniedException        403
-   ├─ TypeSafeNotFoundException                404
-   ├─ TypeSafeUnprocessableEntityException     422
-   ├─ TypeSafeRateLimitException               429   + retryAfterMs
-   ├─ TypeSafeInternalServerException          5xx
-   │  └─ TypeSafeOverloadedException           529
-   └─ TypeSafeApiResponseValidationException         + fieldPath
-TypeSafeApiConnectionException
-└─ TypeSafeApiTimeoutException
-TypeSafeMissingAnswerException, TypeSafeAnswerTypeException    (client side)
+├─ TypeSafeApiException          status, body, headers, endpoint, requestId,
+│  │                             errorType, errorMessage, validationErrors
+│  ├─ TypeSafeBadRequestException              400
+│  ├─ TypeSafeAuthenticationException          401
+│  ├─ TypeSafePermissionDeniedException        403
+│  ├─ TypeSafeNotFoundException                404
+│  ├─ TypeSafeUnprocessableEntityException     422
+│  ├─ TypeSafeRateLimitException               429   + retryAfterMs
+│  ├─ TypeSafeInternalServerException          5xx
+│  │  └─ TypeSafeOverloadedException           529
+│  └─ TypeSafeApiResponseValidationException         + fieldPath
+├─ TypeSafeApiConnectionException
+│  └─ TypeSafeApiTimeoutException
+├─ TypeSafeMissingAnswerException, TypeSafeAnswerTypeException    (client side)
+└─ JevSelfRefineFailedException                (typesafe-spring-ai; a rejected answer)
 ```
 
 Twelve of these mirror the official Python SDK one for one, which the JavaScript SDK mirrors

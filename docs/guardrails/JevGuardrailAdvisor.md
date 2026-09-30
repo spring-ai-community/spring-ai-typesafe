@@ -135,6 +135,7 @@ classDiagram
         +List~String~ triggered
         +List~String~ flagged
         +double severity
+        +Map~String, Double~ scores
         +blocked() boolean
         +summary() String
     }

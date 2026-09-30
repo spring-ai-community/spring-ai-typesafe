@@ -1,5 +1,41 @@
 # Changes
 
+## 0.3.0
+
+Requests now go out in the same order on every run, retries and RAG screening no longer
+fail silently, and the SDK runs against a local [Laya](client/Laya.md) server. A few fixes
+change behaviour; each is listed below with how to migrate.
+
+### New
+
+- **`JsonContent.object(key, value, …)`:** a JSON object whose keys keep the order they are
+  written in, for state, structured instructions and criteria descriptions. Use it in place
+  of a multi-key `Map.of`. See [Key order matters](client/TypeSafeClient.md#key-order-matters).
+- **Using Laya:** how to run the SDK against a local, open-source System One server, and
+  what differs from Jev. The live ITs follow `TYPESAFE_BASE_URL`, so they can run against
+  one too. See [Using Laya](client/Laya.md).
+
+### Fixed
+
+- **Retries silently disabled:** `TypeSafeClient.Builder` counted its 10 s default timeout
+  against the retry budget even for a transport you supplied, so a budget of 10 s or less
+  refused every retry. The client also warns, when built, if the timeout is at or above the
+  budget. See [Errors and Retries](client/ErrorsAndRetries.md).
+- **Silent RAG screening failures:** `JevDocumentFilter` logs one warning per batch when
+  passages could not be screened and were passed through. `JevDocumentReranker` keeps a
+  document unscored, instead of failing the request, when a response lacks the answer.
+
+### Breaking changes
+
+| Change | Migrate |
+|---|---|
+| **Requests are sent in a fixed key order.** `JevToolIndex`, `JevDocumentFilter`, `JevDocumentReranker` and `JevChatModel` built state and instructions with `Map.of`, whose order changes with every JVM run. The tool index also sent its tools in hash order; it now sends them in the order they were indexed. | Nothing to change, but answers can shift slightly against 0.2.0, and more on order-sensitive servers. Re-check thresholds tuned on exact values, and build your own state with `JsonContent.object`. |
+| **`Choice`, `Score` and `SystemOneRequest` copy their collections.** The record constructors snapshot them, and the accessors return unmodifiable views. | Don't change a collection after passing it in, or through `criteria()` or `questions()`. Build a new question or request instead. |
+| **`whenChosen` follows the probability.** A branch is taken only when at least half of the choice's probability, and at least `minConfidence`, is on the labels it names. It used to follow the top label alone. | Expect more `NOT_APPLICABLE` dependents on closely split choices. Lower `minConfidence` if a narrow majority should select the branch. |
+| **A guardrail refusal is final.** A refused response carries `JevGuardrailAdvisor.OUTCOME_CONTEXT_KEY` in its context, and `JevSelfRefineAdvisor` no longer judges or retries it. | Nothing with the default `skipEvaluationPredicate`. A custom predicate replaces the default, so add the context-key check to keep this. |
+| **`JevToolIndex` honours `minimumRelevance`.** When no tool reaches it, none is returned; the top tool used to come back anyway. A `categoryFilter` that matches no tool is ignored instead of returning nothing. | Lower `minimumRelevance` if you relied on always getting a tool. |
+| **An undeclared timeout is unknown, not 10 s.** With `restClientBuilder(...)` or `typeSafeApi(...)` and no `timeout(...)`, `TypeSafeClient.timeout()` is `null` and the retry budget bounds only the waits between attempts. | Declare the transport's real timeout with `timeout(...)`. |
+
 ## 0.2.0 
 
 A stronger [Model-as-a-judge](judge/JevJudge.md) API, a sturdier self-refine advisor, and an

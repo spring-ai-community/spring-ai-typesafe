@@ -127,8 +127,8 @@ Score frustration = Score.builder()
     .build();
 
 double value      = response.scoreValue("frustration");            // 1.1
-String label      = response.score("frustration").nearestLabel();  // "Very angry"
-int level         = response.score("frustration").nearestLevel();  // 2
+String label      = response.score("frustration").nearestLabel();  // "Frustrated but civil"
+int level         = response.score("frustration").nearestLevel();  // 1, the most probable level
 JsonContent first = response.score("frustration").labelOf(0);      // "Calm, just stating facts"
 ```
 
@@ -193,8 +193,8 @@ switch (response.choiceValue("department")) {
 
 `state`, `instructions` and every `criteria` description accept a string, a JSON object, a
 JSON array or `null` — the documentation's `EntryType`. That union is modelled as
-`JsonContent`, and every builder method is overloaded for `String`, `Map`, `List` and
-`JsonContent`. For a JSON object, `JsonContent.object(...)` keeps the keys in the order you
+`JsonContent`, and the builder methods are overloaded for `String`, `Map` and `JsonContent`,
+most of them for `List` too. For a JSON object, `JsonContent.object(...)` keeps the keys in the order you
 write them:
 
 ```java

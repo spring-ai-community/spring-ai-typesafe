@@ -54,7 +54,7 @@ spring-ai-typesafe/
 └── examples/                     # Seven runnable demos
 ```
 
-`typesafe-spring-ai` holds four packages:
+`typesafe-spring-ai` holds five packages:
 
 | Package | Holds | Needs |
 |---------|-------|-------|
@@ -62,6 +62,7 @@ spring-ai-typesafe/
 | `…typesafe.advisor` | [`JevSelfRefineAdvisor`](judge/JevSelfRefineAdvisor.md), [`JevGuardrailAdvisor`](guardrails/JevGuardrailAdvisor.md) | — |
 | `…typesafe.rag` | [`JevDocumentFilter`](rag/JevDocumentFilter.md), [`JevDocumentReranker`](rag/JevDocumentReranker.md) | `spring-ai-rag` |
 | `…typesafe.toolsearch` | [`JevToolIndex`](toolsearch/JevToolIndex.md) | `spring-ai-tool-search-tool` |
+| `…typesafe.chat` | [`JevChatModel`](chat/JevChatModel.md) (experimental) | — |
 
 The last two dependencies are declared `<optional>true</optional>`, so an application that
 does not do RAG or tool search never sees those classes and never pays for the dependency.
@@ -114,8 +115,15 @@ Plain Java without Spring Boot needs only `typesafe-java-sdk`.
 export TYPESAFE_API_KEY=...
 ```
 
-This is the same variable the official Python and JavaScript SDKs read.
-`TypeSafeClient.builder().build()` picks it up with no further configuration.
+```properties
+# application.properties
+spring.ai.typesafe.api-key=${TYPESAFE_API_KEY}
+```
+
+The starter reads the key from the property, not from the environment, so it needs the
+second step. Without Spring Boot, `TypeSafeClient.builder().build()` reads
+`TYPESAFE_API_KEY` itself; it is the same variable the official Python and JavaScript SDKs
+read.
 
 **3. Ask a question:**
 

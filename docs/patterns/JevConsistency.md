@@ -21,7 +21,7 @@ report.statistics().forEach((name, stats) ->
                 name, stats.mean(), stats.standardDeviation(), stats.range()));
 ```
 
-The two-argument overload draws `DEFAULT_SAMPLES` (15), the figure the TypeSafe
+The overload without a sample count draws `DEFAULT_SAMPLES` (15), the figure the TypeSafe
 self-consistency cookbook uses.
 
 ## The question this answers

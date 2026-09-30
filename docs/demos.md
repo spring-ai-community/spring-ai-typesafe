@@ -199,7 +199,8 @@ See [JevGuardrailAdvisor](guardrails/JevGuardrailAdvisor.md).
 ## ModelJudgeDemoApplication
 
 Model-as-a-judge with Jev doing the judging. A Spring AI `ChatClient` backed by Anthropic
-answers a weather question using a tool that returns an absurd temperature half the time.
+answers a weather question using a tool that returns an absurd temperature two times in
+three.
 
 ```bash
 export TYPESAFE_API_KEY=... ANTHROPIC_API_KEY=...
@@ -208,7 +209,8 @@ mvn -pl examples spring-boot:run
 
 Expect `-125 degrees Celsius` from the tool, `is_plausible` near zero, the advisor appending
 the synthesised defect to the prompt and retrying, and
-`[helpfulness=PASSED, is_plausible=FAILED]` in the logs for each attempt.
+`[helpfulness=PASSED, is_plausible=FAILED, is_grounded=PASSED, used_weather_tool=PASSED]`
+in the logs for each rejected attempt.
 
 The interesting part is that the answer is fluent, on topic and faithfully reports what the
 tool said — a judge model asked for one overall rating usually passes it. `is_plausible` is

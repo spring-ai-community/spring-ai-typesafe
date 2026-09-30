@@ -8,7 +8,7 @@ Auto-configures a `TypeSafeClient` bean from `spring.ai.typesafe.*` properties.
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-starter-typesafe</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.3.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -45,7 +45,7 @@ spring.ai.typesafe.retry.total-timeout=30s
 
 | Property | Default | Description |
 |---|---|---|
-| `api-key` | — | The API key. **No bean is created without it.** |
+| `api-key` | — | The API key. **No bean is created when the property is not defined**; a blank value fails startup. |
 | `base-url` | `https://api.typesafe.ai` | The API base URL. |
 | `model` | `jev-latest` | Applied to requests that do not name a model. |
 | `timeout` | `10s` | Per-attempt HTTP timeout. |
@@ -53,8 +53,11 @@ spring.ai.typesafe.retry.total-timeout=30s
 
 ## Conditional wiring
 
-The `TypeSafeClient` bean appears **only once `api-key` is set**, so an application that has
-not been given a key still starts. Guard your own beans the same way if they depend on it:
+The `TypeSafeClient` bean is created **only when the `api-key` property is defined**, so an
+application that does not configure TypeSafe at all still starts. A property that is defined
+but blank, such as `${TYPESAFE_API_KEY:}` with the variable unset, fails startup with a
+message naming the property, and so does an unresolved `${TYPESAFE_API_KEY}` placeholder.
+Guard your own beans the same way if they depend on the client:
 
 ```java
 @Bean
@@ -83,7 +86,7 @@ properties.
 
 ## Endpoints bean
 
-The starter also contributes the configured paths as a
+The starter also contributes the API paths the client uses as a
 `TypeSafeAutoConfiguration.TypeSafeEndpoints` record, which is occasionally useful for
 observability or for building a health check:
 

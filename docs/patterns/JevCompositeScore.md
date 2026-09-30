@@ -35,8 +35,9 @@ candidates.sort(Comparator.comparingDouble(c -> -engineering.of(c.response())));
 
 ## Normalisation
 
-Each dimension is divided by its rubric's own height (`Score.maxLevel()`) before weighting,
-so dimensions with different numbers of levels are comparable:
+Each dimension is divided by its rubric's own height before weighting, so dimensions with
+different numbers of levels are comparable. The height is `ScoreAnswer.maxLevel()`, read from
+the legend the response carries; an answer without a legend is rejected:
 
 ```java
 double normalised = JevCompositeScore.normalise(response.score("python_depth"));  // 0.0 – 1.0

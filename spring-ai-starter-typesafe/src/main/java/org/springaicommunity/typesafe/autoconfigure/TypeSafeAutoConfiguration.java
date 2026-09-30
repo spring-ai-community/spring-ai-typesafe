@@ -37,9 +37,11 @@ import org.springframework.web.client.RestClient;
  * Auto-configures a {@link TypeSafeClient} from {@code spring.ai.typesafe.*}.
  *
  * <p>
- * The client is only created once an API key is configured, so an application that has not
- * been given one starts normally instead of failing at context refresh. Defining a
- * {@code TypeSafeClient} bean of your own switches this off entirely.
+ * The client is only created when the {@code api-key} property is defined, so an
+ * application that does not configure TypeSafe starts normally. A key that is defined but
+ * blank fails fast instead: a client that cannot authenticate is a misconfiguration better
+ * met at startup than on the first call. Defining a {@code TypeSafeClient} bean of your own
+ * switches this off entirely.
  *
  * @author Christian Tzolov
  */
@@ -63,7 +65,8 @@ public class TypeSafeAutoConfiguration {
 
 		// @ConditionalOnProperty matches a property that merely exists, so the very common
 		// `api-key=${TYPESAFE_API_KEY:}` with the variable unset gets this far with a blank
-		// key. Declining here keeps the promise that an application without a key starts.
+		// key. Fail fast, naming the property, rather than build a client that cannot
+		// authenticate.
 		Assert.state(StringUtils.hasText(properties.getApiKey()),
 				() -> "No API key configured. Set " + TypeSafeProperties.CONFIG_PREFIX + ".api-key.");
 

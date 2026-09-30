@@ -10,8 +10,11 @@ A judge holds a list of criteria. Most are a [primitive](../concepts/primitives.
 counts as passing it:
 
 - a **noul** passes when its truth value reaches a minimum
-- a **score** passes when it reaches a level on your rubric
-- a **choice** passes when the selected label is one you accept
+- a **score** passes when at least half of its probability is on the levels at or above
+  your minimum
+- a **choice** passes when at least half of its probability is on the labels you accept
+
+See [how a verdict is decided](#low-confidence-is-undecided-not-failed) for the details.
 
 The rest are [**code checks**](#code-criteria): plain Java predicates for anything the input
 already settles, such as whether a tool was called. They never reach Jev.
@@ -101,10 +104,8 @@ uses the other.
 flowchart TB
     J["JevJudge<br/><small>criteria in, verdict out</small>"]
     S["JevSelfRefineAdvisor<br/><small>CallAdvisor</small>"]
-    G["JevGuardrailAdvisor<br/><small>CallAdvisor</small>"]
     E["JevEvaluator<br/><small>Spring AI Evaluator SPI</small>"]
     S --> J
-    G --> J
     E --> J
 ```
 
@@ -250,8 +251,8 @@ a JSON object.
 | Builder method | Type | Default | Description |
 |---|---|---|---|
 | `noul(String, Noul, double)` | — | — | A criterion passing at or above a truth value. |
-| `score(String, Score, double)` | — | — | A criterion passing at or above a rubric level. |
-| `choice(String, Choice, String...)` | — | — | A criterion passing when the label is accepted. Validates the labels exist on the choice. |
+| `score(String, Score, double)` | — | — | A criterion passing when at least half its probability is on levels at or above the minimum. |
+| `choice(String, Choice, String...)` | — | — | A criterion passing when at least half its probability is on the accepted labels. Validates the labels exist on the choice. |
 | `check(String, Predicate<JevJudgeInput>, String)` | — | — | A [code check](#code-criteria): passes when the predicate returns `true`, otherwise reports the defect. |
 | `criterion(JevCriterion)` | — | — | Add a pre-built criterion of either kind. |
 | `minConfidence(double)` | `double` | `0.6` | How much of a choice's or score's probability must support its verdict; below it, `INCONCLUSIVE`. See [decisive, not peaked](#low-confidence-is-undecided-not-failed). Nouls are unaffected. |

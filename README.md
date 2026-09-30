@@ -72,6 +72,11 @@ The three primitives — `Noul`, `Choice` and `Score` — are described in
 export TYPESAFE_API_KEY=...
 ```
 
+```properties
+# application.properties: the starter reads the key from this property
+spring.ai.typesafe.api-key=${TYPESAFE_API_KEY}
+```
+
 Plain Java without Spring Boot needs only `typesafe-java-sdk`. Java 17 or later; Spring AI
 `2.0.1` or later for `typesafe-spring-ai`. Importing `typesafe-bom` lets you drop the
 versions — see

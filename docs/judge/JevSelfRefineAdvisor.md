@@ -58,6 +58,12 @@ original request and the answer it produced:
 | `assistant_answer` | the final answer |
 | `tool_calls` | the tool calls with their results, `{name, arguments, result}`: read from the prompt at the default order, recorded during the attempt at `BEFORE_TOOLS_ORDER` (see [where it sits](#where-it-sits-and-why)) |
 
+`supporting_context` and `expected_output` are not filled: the advisor has no retrieved
+documents or reference answer to put there. Context a retrieval advisor added to the prompt
+arrives inside `user_question`. So a criterion that reads `supporting_context`, or an
+`appliesWhen` on `input.context()`, sees nothing under this advisor; write groundedness
+against `user_question` or `tool_calls` instead.
+
 Read from the prompt, a `ToolResponseMessage` carries no text of its own, so its results are
 unpacked into `tool_calls` rather than dropped. Each result goes to the earliest open call with the same
 id, or with the same tool name when the provider leaves ids blank (as Google GenAI does), so
