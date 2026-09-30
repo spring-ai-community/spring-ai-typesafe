@@ -2018,7 +2018,9 @@ could be from a cited legal precedent:</p>
 </span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">    </span><span class="p">.</span><span class="na">build</span><span class="p">();</span>
 </span></code></pre></div>
 <h2 id="failure-behaviour">Failure behaviour<a class="headerlink" href="#failure-behaviour" title="Permanent link">&para;</a></h2>
-<p>A document whose call fails is <strong>kept, unscored, after every document that was scored</strong>. A
+<p>A document whose call fails, or whose response carries no usable answer, is <strong>kept,
+unscored, after every document that was scored</strong>, and the batch logs one warning with the
+count. A
 transport failure is not evidence that a passage is irrelevant, so dropping it would
 silently shrink the context on an unrelated error — but it is not evidence of relevance
 either, so an unjudged passage never outranks one this reranker actually measured. That
