@@ -2087,9 +2087,11 @@ its own threshold.</p>
 counts as passing it:</p>
 <ul>
 <li>a <strong>noul</strong> passes when its truth value reaches a minimum</li>
-<li>a <strong>score</strong> passes when it reaches a level on your rubric</li>
-<li>a <strong>choice</strong> passes when the selected label is one you accept</li>
+<li>a <strong>score</strong> passes when at least half of its probability is on the levels at or above
+  your minimum</li>
+<li>a <strong>choice</strong> passes when at least half of its probability is on the labels you accept</li>
 </ul>
+<p>See <a href="#low-confidence-is-undecided-not-failed">how a verdict is decided</a> for the details.</p>
 <p>The rest are <a href="#code-criteria"><strong>code checks</strong></a>: plain Java predicates for anything the input
 already settles, such as whether a tool was called. They never reach Jev.</p>
 <p><code>judge(...)</code> sends every question in one request and returns a <code>JevVerdict</code>: whether everything
@@ -2167,10 +2169,8 @@ uses the other.</p>
 <pre class="mermaid"><code>flowchart TB
     J["JevJudge&lt;br/&gt;&lt;small&gt;criteria in, verdict out&lt;/small&gt;"]
     S["JevSelfRefineAdvisor&lt;br/&gt;&lt;small&gt;CallAdvisor&lt;/small&gt;"]
-    G["JevGuardrailAdvisor&lt;br/&gt;&lt;small&gt;CallAdvisor&lt;/small&gt;"]
     E["JevEvaluator&lt;br/&gt;&lt;small&gt;Spring AI Evaluator SPI&lt;/small&gt;"]
     S --&gt; J
-    G --&gt; J
     E --&gt; J</code></pre>
 <table>
 <thead>
@@ -2389,13 +2389,13 @@ raised accuracy from 0.8 to 1.0 and lowered variance.</p>
 <td><code>score(String, Score, double)</code></td>
 <td>—</td>
 <td>—</td>
-<td>A criterion passing at or above a rubric level.</td>
+<td>A criterion passing when at least half its probability is on levels at or above the minimum.</td>
 </tr>
 <tr>
 <td><code>choice(String, Choice, String...)</code></td>
 <td>—</td>
 <td>—</td>
-<td>A criterion passing when the label is accepted. Validates the labels exist on the choice.</td>
+<td>A criterion passing when at least half its probability is on the accepted labels. Validates the labels exist on the choice.</td>
 </tr>
 <tr>
 <td><code>check(String, Predicate&lt;JevJudgeInput&gt;, String)</code></td>

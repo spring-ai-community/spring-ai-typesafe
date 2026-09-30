@@ -1918,8 +1918,9 @@ rather than by rewording a question.</p>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">candidates</span><span class="p">.</span><span class="na">sort</span><span class="p">(</span><span class="n">Comparator</span><span class="p">.</span><span class="na">comparingDouble</span><span class="p">(</span><span class="n">c</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="o">-</span><span class="n">engineering</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="n">c</span><span class="p">.</span><span class="na">response</span><span class="p">())));</span>
 </span></code></pre></div>
 <h2 id="normalisation">Normalisation<a class="headerlink" href="#normalisation" title="Permanent link">&para;</a></h2>
-<p>Each dimension is divided by its rubric's own height (<code>Score.maxLevel()</code>) before weighting,
-so dimensions with different numbers of levels are comparable:</p>
+<p>Each dimension is divided by its rubric's own height before weighting, so dimensions with
+different numbers of levels are comparable. The height is <code>ScoreAnswer.maxLevel()</code>, read from
+the legend the response carries; an answer without a legend is rejected:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kt">double</span><span class="w"> </span><span class="n">normalised</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">JevCompositeScore</span><span class="p">.</span><span class="na">normalise</span><span class="p">(</span><span class="n">response</span><span class="p">.</span><span class="na">score</span><span class="p">(</span><span class="s">"python_depth"</span><span class="p">));</span><span class="w">  </span><span class="c1">// 0.0 – 1.0</span>
 </span></code></pre></div>
 <p>With weights summing to 1, the composite is itself in <code>[0, 1]</code>.</p>

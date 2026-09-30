@@ -1895,20 +1895,21 @@
 rather than on a status code.</p>
 <h2 id="the-hierarchy">The hierarchy<a class="headerlink" href="#the-hierarchy" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>TypeSafeException
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>└─ TypeSafeApiException          status, body, headers, endpoint, requestId,
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>   │                             errorType, errorMessage, validationErrors
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   ├─ TypeSafeBadRequestException              400
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>   ├─ TypeSafeAuthenticationException          401
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>   ├─ TypeSafePermissionDeniedException        403
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>   ├─ TypeSafeNotFoundException                404
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>   ├─ TypeSafeUnprocessableEntityException     422
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>   ├─ TypeSafeRateLimitException               429   + retryAfterMs
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>   ├─ TypeSafeInternalServerException          5xx
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>   │  └─ TypeSafeOverloadedException           529
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>   └─ TypeSafeApiResponseValidationException         + fieldPath
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>TypeSafeApiConnectionException
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>└─ TypeSafeApiTimeoutException
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>TypeSafeMissingAnswerException, TypeSafeAnswerTypeException    (client side)
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>├─ TypeSafeApiException          status, body, headers, endpoint, requestId,
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│  │                             errorType, errorMessage, validationErrors
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  ├─ TypeSafeBadRequestException              400
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  ├─ TypeSafeAuthenticationException          401
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  ├─ TypeSafePermissionDeniedException        403
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  ├─ TypeSafeNotFoundException                404
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│  ├─ TypeSafeUnprocessableEntityException     422
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  ├─ TypeSafeRateLimitException               429   + retryAfterMs
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│  ├─ TypeSafeInternalServerException          5xx
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│  │  └─ TypeSafeOverloadedException           529
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>│  └─ TypeSafeApiResponseValidationException         + fieldPath
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>├─ TypeSafeApiConnectionException
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>│  └─ TypeSafeApiTimeoutException
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>├─ TypeSafeMissingAnswerException, TypeSafeAnswerTypeException    (client side)
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>└─ JevSelfRefineFailedException                (typesafe-spring-ai; a rejected answer)
 </span></code></pre></div>
 <p>Twelve of these mirror the official Python SDK one for one, which the JavaScript SDK mirrors
 in turn. Three do not, and each earns its place:</p>

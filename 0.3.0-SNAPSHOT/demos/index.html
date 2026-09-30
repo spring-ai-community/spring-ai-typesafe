@@ -2079,13 +2079,15 @@ each request scored.</p>
 <p>See <a href="../guardrails/JevGuardrailAdvisor/">JevGuardrailAdvisor</a>.</p>
 <h2 id="modeljudgedemoapplication">ModelJudgeDemoApplication<a class="headerlink" href="#modeljudgedemoapplication" title="Permanent link">&para;</a></h2>
 <p>Model-as-a-judge with Jev doing the judging. A Spring AI <code>ChatClient</code> backed by Anthropic
-answers a weather question using a tool that returns an absurd temperature half the time.</p>
+answers a weather question using a tool that returns an absurd temperature two times in
+three.</p>
 <div class="highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">TYPESAFE_API_KEY</span><span class="o">=</span>...<span class="w"> </span><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>...
 </span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mvn<span class="w"> </span>-pl<span class="w"> </span>examples<span class="w"> </span>spring-boot:run
 </span></code></pre></div>
 <p>Expect <code>-125 degrees Celsius</code> from the tool, <code>is_plausible</code> near zero, the advisor appending
 the synthesised defect to the prompt and retrying, and
-<code>[helpfulness=PASSED, is_plausible=FAILED]</code> in the logs for each attempt.</p>
+<code>[helpfulness=PASSED, is_plausible=FAILED, is_grounded=PASSED, used_weather_tool=PASSED]</code>
+in the logs for each rejected attempt.</p>
 <p>The interesting part is that the answer is fluent, on topic and faithfully reports what the
 tool said — a judge model asked for one overall rating usually passes it. <code>is_plausible</code> is
 a question with one job, so it does not.</p>

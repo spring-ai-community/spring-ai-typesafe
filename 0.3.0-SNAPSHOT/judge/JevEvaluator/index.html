@@ -1926,7 +1926,7 @@ one without changing a line.</p>
 </tr>
 <tr>
 <td><code>getScore()</code></td>
-<td>the fraction of criteria that passed</td>
+<td>the fraction of the criteria that applied which passed; <code>NOT_APPLICABLE</code> ones are left out</td>
 </tr>
 <tr>
 <td><code>getFeedback()</code></td>
@@ -1946,7 +1946,7 @@ one without changing a line.</p>
 <div class="admonition note">
 <p class="admonition-title">The single score is lossy on purpose</p>
 <p><code>EvaluationResponse</code> has room for one float, while a judge holds one threshold per
-criterion. The score is the fraction of criteria that passed, and the per-criterion
+criterion. The score is the fraction of the applicable criteria that passed, and the per-criterion
 detail is preserved in the metadata. If that view is what you are after, call
 <a href="../JevJudge/"><code>JevJudge.judge</code></a> directly and read the <code>JevVerdict</code>.</p>
 <p>An inconclusive criterion counts as neither passed nor failed, so it lowers the score

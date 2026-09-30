@@ -1650,15 +1650,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#020" class="md-nav__link">
+  <a href="#030" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.2.0
+        0.3.0
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.2.0">
+    <nav class="md-nav" aria-label="0.3.0">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1673,7 +1673,57 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#breaking-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.2.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaking changes
@@ -1723,15 +1773,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#020" class="md-nav__link">
+  <a href="#030" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.2.0
+        0.3.0
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.2.0">
+    <nav class="md-nav" aria-label="0.3.0">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1746,7 +1796,57 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#fixed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#breaking-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.2.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_1" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaking changes
@@ -1790,11 +1890,69 @@
 
 
 <h1 id="changes">Changes<a class="headerlink" href="#changes" title="Permanent link">&para;</a></h1>
+<h2 id="030">0.3.0<a class="headerlink" href="#030" title="Permanent link">&para;</a></h2>
+<p>Requests now go out in the same order on every run, retries and RAG screening no longer
+fail silently, and the SDK runs against a local <a href="../client/Laya/">Laya</a> server. A few fixes
+change behaviour; each is listed below with how to migrate.</p>
+<h3 id="new">New<a class="headerlink" href="#new" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>JsonContent.object(key, value, …)</code>:</strong> a JSON object whose keys keep the order they are
+  written in, for state, structured instructions and criteria descriptions. Use it in place
+  of a multi-key <code>Map.of</code>. See <a href="../client/TypeSafeClient/#key-order-matters">Key order matters</a>.</li>
+<li><strong>Using Laya:</strong> how to run the SDK against a local, open-source System One server, and
+  what differs from Jev. The live ITs follow <code>TYPESAFE_BASE_URL</code>, so they can run against
+  one too. See <a href="../client/Laya/">Using Laya</a>.</li>
+</ul>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Retries silently disabled:</strong> <code>TypeSafeClient.Builder</code> counted its 10 s default timeout
+  against the retry budget even for a transport you supplied, so a budget of 10 s or less
+  refused every retry. The client also warns, when built, if the timeout is at or above the
+  budget. See <a href="../client/ErrorsAndRetries/">Errors and Retries</a>.</li>
+<li><strong>Silent RAG screening failures:</strong> <code>JevDocumentFilter</code> logs one warning per batch when
+  passages could not be screened and were passed through. <code>JevDocumentReranker</code> keeps a
+  document unscored, instead of failing the request, when a response lacks the answer.</li>
+</ul>
+<h3 id="breaking-changes">Breaking changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Migrate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Requests are sent in a fixed key order.</strong> <code>JevToolIndex</code>, <code>JevDocumentFilter</code>, <code>JevDocumentReranker</code> and <code>JevChatModel</code> built state and instructions with <code>Map.of</code>, whose order changes with every JVM run. The tool index also sent its tools in hash order; it now sends them in the order they were indexed.</td>
+<td>Nothing to change, but answers can shift slightly against 0.2.0, and more on order-sensitive servers. Re-check thresholds tuned on exact values, and build your own state with <code>JsonContent.object</code>.</td>
+</tr>
+<tr>
+<td><strong><code>Choice</code>, <code>Score</code> and <code>SystemOneRequest</code> copy their collections.</strong> The record constructors snapshot them, and the accessors return unmodifiable views.</td>
+<td>Don't change a collection after passing it in, or through <code>criteria()</code> or <code>questions()</code>. Build a new question or request instead.</td>
+</tr>
+<tr>
+<td><strong><code>whenChosen</code> follows the probability.</strong> A branch is taken only when at least half of the choice's probability, and at least <code>minConfidence</code>, is on the labels it names. It used to follow the top label alone.</td>
+<td>Expect more <code>NOT_APPLICABLE</code> dependents on closely split choices. Lower <code>minConfidence</code> if a narrow majority should select the branch.</td>
+</tr>
+<tr>
+<td><strong>A guardrail refusal is final.</strong> A refused response carries <code>JevGuardrailAdvisor.OUTCOME_CONTEXT_KEY</code> in its context, and <code>JevSelfRefineAdvisor</code> no longer judges or retries it.</td>
+<td>Nothing with the default <code>skipEvaluationPredicate</code>. A custom predicate replaces the default, so add the context-key check to keep this.</td>
+</tr>
+<tr>
+<td><strong><code>JevToolIndex</code> honours <code>minimumRelevance</code>.</strong> When no tool reaches it, none is returned; the top tool used to come back anyway. A <code>categoryFilter</code> that matches no tool is ignored instead of returning nothing.</td>
+<td>Lower <code>minimumRelevance</code> if you relied on always getting a tool.</td>
+</tr>
+<tr>
+<td><strong>An undeclared timeout is unknown, not 10 s.</strong> With <code>restClientBuilder(...)</code> or <code>typeSafeApi(...)</code> and no <code>timeout(...)</code>, <code>TypeSafeClient.timeout()</code> is <code>null</code> and the retry budget bounds only the waits between attempts.</td>
+<td>Declare the transport's real timeout with <code>timeout(...)</code>.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="020">0.2.0<a class="headerlink" href="#020" title="Permanent link">&para;</a></h2>
 <p>A stronger <a href="../judge/JevJudge/">Model-as-a-judge</a> API, a sturdier self-refine advisor, and an
 experimental <a href="../chat/JevChatModel/"><code>JevChatModel</code></a>. Most upgrades need a recompile and at
 most a type rename; each breaking change below says how to migrate.</p>
-<h3 id="new">New<a class="headerlink" href="#new" title="Permanent link">&para;</a></h3>
+<h3 id="new_1">New<a class="headerlink" href="#new_1" title="Permanent link">&para;</a></h3>
 <p><strong>Judge</strong></p>
 <ul>
 <li><strong>Code criteria:</strong> <code>JevJudge.Builder.check(name, predicate, defect)</code>. A plain-Java check
@@ -1829,7 +1987,7 @@ most a type rename; each breaking change below says how to migrate.</p>
 <li><strong>Criteria-only nouls:</strong> <code>Noul.builder()</code> accepts a noul with criteria (<code>whenTrue</code> /
   <code>whenFalse</code>) and no instructions, as the API does. It still rejects a noul with neither.</li>
 </ul>
-<h3 id="breaking-changes">Breaking changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
+<h3 id="breaking-changes_1">Breaking changes<a class="headerlink" href="#breaking-changes_1" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>

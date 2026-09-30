@@ -2081,6 +2081,11 @@ original request and the answer it produced:</p>
 </tr>
 </tbody>
 </table>
+<p><code>supporting_context</code> and <code>expected_output</code> are not filled: the advisor has no retrieved
+documents or reference answer to put there. Context a retrieval advisor added to the prompt
+arrives inside <code>user_question</code>. So a criterion that reads <code>supporting_context</code>, or an
+<code>appliesWhen</code> on <code>input.context()</code>, sees nothing under this advisor; write groundedness
+against <code>user_question</code> or <code>tool_calls</code> instead.</p>
 <p>Read from the prompt, a <code>ToolResponseMessage</code> carries no text of its own, so its results are
 unpacked into <code>tool_calls</code> rather than dropped. Each result goes to the earliest open call with the same
 id, or with the same tool name when the provider leaves ids blank (as Google GenAI does), so

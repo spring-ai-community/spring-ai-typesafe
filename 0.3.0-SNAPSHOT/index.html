@@ -1933,7 +1933,7 @@ questions, composed in code</em> rather than one broad rubric prompt.</p>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── typesafe-bom/                 # Bill of materials for the three above
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>└── examples/                     # Seven runnable demos
 </span></code></pre></div>
-<p><code>typesafe-spring-ai</code> holds four packages:</p>
+<p><code>typesafe-spring-ai</code> holds five packages:</p>
 <table>
 <thead>
 <tr>
@@ -1962,6 +1962,11 @@ questions, composed in code</em> rather than one broad rubric prompt.</p>
 <td><code>…typesafe.toolsearch</code></td>
 <td><a href="toolsearch/JevToolIndex/"><code>JevToolIndex</code></a></td>
 <td><code>spring-ai-tool-search-tool</code></td>
+</tr>
+<tr>
+<td><code>…typesafe.chat</code></td>
+<td><a href="chat/JevChatModel/"><code>JevChatModel</code></a> (experimental)</td>
+<td>—</td>
 </tr>
 </tbody>
 </table>
@@ -2007,25 +2012,30 @@ apart from each other.</p>
 <p><strong>2. Set your API key:</strong></p>
 <div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">TYPESAFE_API_KEY</span><span class="o">=</span>...
 </span></code></pre></div>
-<p>This is the same variable the official Python and JavaScript SDKs read.
-<code>TypeSafeClient.builder().build()</code> picks it up with no further configuration.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># application.properties</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="na">spring.ai.typesafe.api-key</span><span class="o">=</span><span class="s">${TYPESAFE_API_KEY}</span>
+</span></code></pre></div>
+<p>The starter reads the key from the property, not from the environment, so it needs the
+second step. Without Spring Boot, <code>TypeSafeClient.builder().build()</code> reads
+<code>TYPESAFE_API_KEY</code> itself; it is the same variable the official Python and JavaScript SDKs
+read.</p>
 <p><strong>3. Ask a question:</strong></p>
-<div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@SpringBootApplication</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Application</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nd">@Bean</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="n">CommandLineRunner</span><span class="w"> </span><span class="nf">demo</span><span class="p">(</span><span class="n">TypeSafeClient</span><span class="w"> </span><span class="n">typeSafeClient</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">args</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">            </span><span class="n">SystemOneResponse</span><span class="w"> </span><span class="n">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">typeSafeClient</span><span class="p">.</span><span class="na">systemOne</span><span class="p">(</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">                    </span><span class="s">"My card was charged twice."</span><span class="p">,</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">                    </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"refund_requested"</span><span class="p">,</span><span class="w"> </span><span class="n">Noul</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"Is the customer asking for money back?"</span><span class="p">)));</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">response</span><span class="p">.</span><span class="na">noulValue</span><span class="p">(</span><span class="s">"refund_requested"</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0.8</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">                </span><span class="n">startRefund</span><span class="p">();</span>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">            </span><span class="p">}</span>
-</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">        </span><span class="p">};</span>
-</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">    </span><span class="p">}</span>
-</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nd">@SpringBootApplication</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">Application</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="nd">@Bean</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="n">CommandLineRunner</span><span class="w"> </span><span class="nf">demo</span><span class="p">(</span><span class="n">TypeSafeClient</span><span class="w"> </span><span class="n">typeSafeClient</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">args</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">            </span><span class="n">SystemOneResponse</span><span class="w"> </span><span class="n">response</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">typeSafeClient</span><span class="p">.</span><span class="na">systemOne</span><span class="p">(</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">                    </span><span class="s">"My card was charged twice."</span><span class="p">,</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">                    </span><span class="n">Map</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"refund_requested"</span><span class="p">,</span><span class="w"> </span><span class="n">Noul</span><span class="p">.</span><span class="na">of</span><span class="p">(</span><span class="s">"Is the customer asking for money back?"</span><span class="p">)));</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">response</span><span class="p">.</span><span class="na">noulValue</span><span class="p">(</span><span class="s">"refund_requested"</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">0.8</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">                </span><span class="n">startRefund</span><span class="p">();</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">            </span><span class="p">}</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">        </span><span class="p">};</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">    </span><span class="p">}</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>The starter contributes the <code>TypeSafeClient</code> bean as soon as <code>spring.ai.typesafe.api-key</code>
 is set — see <a href="client/SpringBootStarter/">Spring Boot Starter</a>.</p>
@@ -2089,17 +2099,17 @@ is set — see <a href="client/SpringBootStarter/">Spring Boot Starter</a>.</p>
 <li>A TypeSafe API key, or a compatible local server such as <a href="client/Laya/">Laya</a></li>
 </ul>
 <h2 id="building">Building<a class="headerlink" href="#building" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Build everything; the suite is offline and needs no key</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mvn<span class="w"> </span>clean<span class="w"> </span>verify
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Add the tests that talk to the real API</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">TYPESAFE_API_KEY</span><span class="o">=</span>...
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>mvn<span class="w"> </span>clean<span class="w"> </span>verify<span class="w"> </span>-Pintegration-tests
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Run a demo</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>mvn<span class="w"> </span>install<span class="w"> </span>-DskipTests
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>mvn<span class="w"> </span>-pl<span class="w"> </span>examples<span class="w"> </span>spring-boot:run<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">    </span>-Dspring-boot.run.main-class<span class="o">=</span>org.springaicommunity.typesafe.demo.TicketTriageDemo
+<div class="highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Build everything; the suite is offline and needs no key</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mvn<span class="w"> </span>clean<span class="w"> </span>verify
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Add the tests that talk to the real API</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">TYPESAFE_API_KEY</span><span class="o">=</span>...
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>mvn<span class="w"> </span>clean<span class="w"> </span>verify<span class="w"> </span>-Pintegration-tests
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1"># Run a demo</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>mvn<span class="w"> </span>install<span class="w"> </span>-DskipTests
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>mvn<span class="w"> </span>-pl<span class="w"> </span>examples<span class="w"> </span>spring-boot:run<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">    </span>-Dspring-boot.run.main-class<span class="o">=</span>org.springaicommunity.typesafe.demo.TicketTriageDemo
 </span></code></pre></div>
 <p>Integration tests are gated twice — behind the <code>integration-tests</code> profile <em>and</em> behind
 <code>TYPESAFE_API_KEY</code> — so an exported key never turns an ordinary build into a billed one.</p>

@@ -1896,7 +1896,7 @@
 <div class="highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">&lt;dependency&gt;</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="nt">&lt;groupId&gt;</span>org.springaicommunity<span class="nt">&lt;/groupId&gt;</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">&lt;artifactId&gt;</span>spring-ai-starter-typesafe<span class="nt">&lt;/artifactId&gt;</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">&lt;version&gt;</span>0.1.0-SNAPSHOT<span class="nt">&lt;/version&gt;</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">&lt;version&gt;</span>0.3.0-SNAPSHOT<span class="nt">&lt;/version&gt;</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">&lt;/dependency&gt;</span>
 </span></code></pre></div>
 <div class="highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="na">spring.ai.typesafe.api-key</span><span class="o">=</span><span class="s">${TYPESAFE_API_KEY}</span>
@@ -1934,7 +1934,7 @@
 <tr>
 <td><code>api-key</code></td>
 <td>—</td>
-<td>The API key. <strong>No bean is created without it.</strong></td>
+<td>The API key. <strong>No bean is created when the property is not defined</strong>; a blank value fails startup.</td>
 </tr>
 <tr>
 <td><code>base-url</code></td>
@@ -1959,8 +1959,11 @@
 </tbody>
 </table>
 <h2 id="conditional-wiring">Conditional wiring<a class="headerlink" href="#conditional-wiring" title="Permanent link">&para;</a></h2>
-<p>The <code>TypeSafeClient</code> bean appears <strong>only once <code>api-key</code> is set</strong>, so an application that has
-not been given a key still starts. Guard your own beans the same way if they depend on it:</p>
+<p>The <code>TypeSafeClient</code> bean is created <strong>only when the <code>api-key</code> property is defined</strong>, so an
+application that does not configure TypeSafe at all still starts. A property that is defined
+but blank, such as <code>${TYPESAFE_API_KEY:}</code> with the variable unset, fails startup with a
+message naming the property, and so does an unresolved <code>${TYPESAFE_API_KEY}</code> placeholder.
+Guard your own beans the same way if they depend on the client:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@Bean</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nd">@ConditionalOnBean</span><span class="p">(</span><span class="n">TypeSafeClient</span><span class="p">.</span><span class="na">class</span><span class="p">)</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">JevJudge</span><span class="w"> </span><span class="nf">answerQualityJudge</span><span class="p">(</span><span class="n">TypeSafeClient</span><span class="w"> </span><span class="n">typeSafeClient</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
@@ -1983,7 +1986,7 @@ throwaway <code>main</code> you write, and the live ITs. That is also how to poi
 compatible server on purpose; see <a href="../Laya/">Using Laya</a>.</p>
 </div>
 <h2 id="endpoints-bean">Endpoints bean<a class="headerlink" href="#endpoints-bean" title="Permanent link">&para;</a></h2>
-<p>The starter also contributes the configured paths as a
+<p>The starter also contributes the API paths the client uses as a
 <code>TypeSafeAutoConfiguration.TypeSafeEndpoints</code> record, which is occasionally useful for
 observability or for building a health check:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@Bean</span>
