@@ -71,7 +71,9 @@ JevDocumentReranker.builder(typeSafeClient)
 
 ## Failure behaviour
 
-A document whose call fails is **kept, unscored, after every document that was scored**. A
+A document whose call fails, or whose response carries no usable answer, is **kept,
+unscored, after every document that was scored**, and the batch logs one warning with the
+count. A
 transport failure is not evidence that a passage is irrelevant, so dropping it would
 silently shrink the context on an unrelated error — but it is not evidence of relevance
 either, so an unjudged passage never outranks one this reranker actually measured. That

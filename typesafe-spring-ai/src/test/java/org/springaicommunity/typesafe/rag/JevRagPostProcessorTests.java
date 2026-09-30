@@ -23,6 +23,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springaicommunity.typesafe.JevBatchOptions;
 import org.springaicommunity.typesafe.MockTypeSafeServer;
 
@@ -32,6 +33,8 @@ import org.springaicommunity.typesafe.response.Usage;
 
 import org.springframework.ai.document.Document;
 import org.springframework.ai.rag.Query;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.test.web.client.ExpectedCount;
 
@@ -44,6 +47,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
  *
  * @author Christian Tzolov
  */
+@ExtendWith(OutputCaptureExtension.class)
 class JevRagPostProcessorTests {
 
 	private static final Pattern DOC = Pattern.compile("doc-(\\d+)");
@@ -82,7 +86,7 @@ class JevRagPostProcessorTests {
 	}
 
 	@Test
-	void aDocumentWhoseCallFailedKeepsItsPlaceRatherThanBeingDropped() {
+	void aDocumentWhoseCallFailedIsKeptBelowTheScoredOnesRatherThanDropped() {
 		// A transport failure is not evidence that a passage is irrelevant, so losing it
 		// would silently shrink the context on an unrelated error.
 		this.mock.server()
@@ -157,6 +161,41 @@ class JevRagPostProcessorTests {
 
 		assertThat(reranked.get(0).getMetadata()).containsKey(JevDocumentReranker.SCORE_METADATA_KEY);
 		assertThat(original.get(0).getMetadata()).doesNotContainKey(JevDocumentReranker.SCORE_METADATA_KEY);
+	}
+
+	@Test
+	void aRerankingResponseWithoutTheAnswerLeavesTheDocumentUnscoredRatherThanFailingTheRequest(
+			CapturedOutput output) {
+		// The filter already tolerated this; the reranker threw out of process().
+		respondPerDocument(2, index -> index == 7
+				? "{\"model\":\"jev-1.13.0\",\"answers\":{\"something_else\":{\"type\":\"noul\",\"noul\":0.9}},"
+						+ "\"usage\":{}}"
+				: "{\"model\":\"jev-1.13.0\",\"answers\":{\"answers_query\":{\"type\":\"noul\",\"noul\":0.4}},"
+						+ "\"usage\":{}}");
+
+		List<Document> reranked = JevDocumentReranker.builder(this.mock.client())
+			.batchOptions(JevBatchOptions.ofConcurrency(1))
+			.build()
+			.process(this.query, documents(7, 1));
+
+		assertThat(reranked).extracting(Document::getId).containsExactly("doc-1", "doc-7");
+		assertThat(reranked.get(1).getMetadata()).doesNotContainKey(JevDocumentReranker.SCORE_METADATA_KEY);
+		assertThat(output).contains("Jev could not score 1 of 2 passages");
+	}
+
+	@Test
+	void sayingSoWhenPassagesCouldNotBeScreened(CapturedOutput output) {
+		// Failing open is the right call, but not silently: with a bad key or an outage the
+		// injection screen would otherwise look as if it had run.
+		respondPerDocument(2, index -> null);
+
+		List<Document> kept = JevDocumentFilter.builder(this.mock.client())
+			.batchOptions(JevBatchOptions.ofConcurrency(1))
+			.build()
+			.process(this.query, documents(1, 7));
+
+		assertThat(kept).extracting(Document::getId).containsExactly("doc-1", "doc-7");
+		assertThat(output).contains("Jev could not screen 2 of 2 passages, passing them through unscreened");
 	}
 
 	@Test

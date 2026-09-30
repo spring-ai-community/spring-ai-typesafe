@@ -92,6 +92,11 @@ A passage whose screening call fails is **kept unclassified**. A transport error
 evidence about a document, and silently shrinking the context on an unrelated failure is
 worse than passing a passage through unscreened.
 
+That is fail-open, so it is never silent: each batch with failures logs one warning with
+the count, such as `Jev could not screen 12 of 12 passages, passing them through unscreened`.
+With a wrong API key or an outage every passage is passed through, and that warning is the
+only sign the injection screen did not run. Alert on it where the screen matters.
+
 ## Cost
 
 One call per passage, four questions inside each — the pairs are independent, so this is

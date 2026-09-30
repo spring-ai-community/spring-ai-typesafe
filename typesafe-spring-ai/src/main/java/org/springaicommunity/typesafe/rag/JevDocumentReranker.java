@@ -25,10 +25,13 @@ import java.util.List;
 import java.util.Map;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springaicommunity.typesafe.JevBatchOptions;
 import org.springaicommunity.typesafe.JevBatchResult;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.TypeSafeClient;
+import org.springaicommunity.typesafe.exception.TypeSafeException;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.response.SystemOneResponse;
 
@@ -70,6 +73,8 @@ import org.springframework.util.Assert;
  * @author Christian Tzolov
  */
 public class JevDocumentReranker implements DocumentPostProcessor {
+
+	private static final Logger logger = LoggerFactory.getLogger(JevDocumentReranker.class);
 
 	/** Metadata key holding the score this reranker gave a document. */
 	public static final String SCORE_METADATA_KEY = "jev.rerank.score";
@@ -123,12 +128,35 @@ public class JevDocumentReranker implements DocumentPostProcessor {
 				this.batchOptions);
 
 		List<Scored> scored = new ArrayList<>(documents.size());
+		int unscored = 0;
+		TypeSafeException firstFailure = null;
 		for (int i = 0; i < documents.size(); i++) {
 			JevBatchResult<SystemOneResponse> result = results.get(i);
 			// A failed call says nothing about the document, so it is recorded as unknown
-			// rather than as zero, which would read as "judged irrelevant".
-			Double score = result.succeeded() ? result.orThrow().noulValue(QUESTION_NAME) : null;
+			// rather than as zero, which would read as "judged irrelevant". A response
+			// without a usable answer counts the same: it must not fail the whole request.
+			Double score = null;
+			TypeSafeException failure = result.failure();
+			if (result.succeeded()) {
+				try {
+					score = result.orThrow().noulValue(QUESTION_NAME);
+				}
+				catch (TypeSafeException ex) {
+					failure = ex;
+				}
+			}
+			if (score == null) {
+				unscored++;
+				if (firstFailure == null) {
+					firstFailure = failure;
+				}
+			}
 			scored.add(new Scored(i, documents.get(i), score));
+		}
+		if (unscored > 0) {
+			// Not silently: when every call fails this is the retriever's order again.
+			logger.warn("Jev could not score {} of {} passages, keeping them unscored after the scored ones: {}",
+					unscored, documents.size(), firstFailure == null ? "unknown failure" : firstFailure.getMessage());
 		}
 
 		List<Scored> kept = scored.stream()

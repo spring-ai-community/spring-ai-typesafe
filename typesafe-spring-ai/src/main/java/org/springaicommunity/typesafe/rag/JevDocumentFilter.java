@@ -162,6 +162,8 @@ public class JevDocumentFilter implements DocumentPostProcessor {
 				this.batchOptions);
 
 		List<Document> kept = new ArrayList<>();
+		int unscreened = 0;
+		TypeSafeException firstFailure = null;
 		for (int i = 0; i < documents.size(); i++) {
 			Document document = documents.get(i);
 			JevBatchResult<SystemOneResponse> result = results.get(i);
@@ -180,6 +182,12 @@ public class JevDocumentFilter implements DocumentPostProcessor {
 							document.getId(), ex.getMessage());
 				}
 			}
+			else {
+				unscreened++;
+				if (firstFailure == null) {
+					firstFailure = result.failure();
+				}
+			}
 
 			if (classification == null) {
 				kept.add(document);
@@ -191,6 +199,12 @@ public class JevDocumentFilter implements DocumentPostProcessor {
 				metadata.put(CLASSIFICATION_METADATA_KEY, classification.name());
 				kept.add(document.mutate().metadata(metadata).build());
 			}
+		}
+		if (unscreened > 0) {
+			// Failing open must not be silent: with a bad key or an outage every passage
+			// lands here, and the injection screen would otherwise look as if it had run.
+			logger.warn("Jev could not screen {} of {} passages, passing them through unscreened: {}", unscreened,
+					documents.size(), firstFailure == null ? "unknown failure" : firstFailure.getMessage());
 		}
 		return kept;
 	}
