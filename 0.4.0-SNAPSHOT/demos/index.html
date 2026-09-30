@@ -670,6 +670,8 @@
       
         
       
+        
+      
     
     
     
@@ -842,6 +844,34 @@
     
   
     Using Laya
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../client/Ollama/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using Ollama
   
 
     
@@ -1702,6 +1732,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#ollamasystemonedemoapplication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OllamaSystemOneDemoApplication
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1851,6 +1892,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#ollamasystemonedemoapplication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OllamaSystemOneDemoApplication
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1890,7 +1942,7 @@
 
 
 <h1 id="demos">Demos<a class="headerlink" href="#demos" title="Permanent link">&para;</a></h1>
-<p>Seven runnable entry points in <code>examples</code>. Run <code>mvn install -DskipTests</code> from the reactor root
+<p>Eight runnable entry points in <code>examples</code>. Run <code>mvn install -DskipTests</code> from the reactor root
 first, so the other modules are resolvable; <code>spring-boot:run</code> is a single-module goal, so it
 takes <code>-pl examples</code> <strong>without</strong> <code>-am</code>.</p>
 <table>
@@ -1937,9 +1989,14 @@ takes <code>-pl examples</code> <strong>without</strong> <code>-am</code>.</p>
 <td>the self-refine judge loop</td>
 <td>both keys</td>
 </tr>
+<tr>
+<td><a href="#ollamasystemonedemoapplication">OllamaSystemOneDemoApplication</a></td>
+<td>the same client against a local Ollama</td>
+<td>no key, Ollama 0.35+</td>
+</tr>
 </tbody>
 </table>
-<p>Only the last needs <code>ANTHROPIC_API_KEY</code>.</p>
+<p>Only <code>ModelJudgeDemoApplication</code> needs <code>ANTHROPIC_API_KEY</code>, and the Ollama demo needs no key at all.</p>
 <div class="admonition tip">
 <p class="admonition-title">Running the demos against Laya</p>
 <p>The plain demos build their client with <code>TypeSafeClient.builder()</code>, so they follow
@@ -2092,6 +2149,36 @@ in the logs for each rejected attempt.</p>
 tool said — a judge model asked for one overall rating usually passes it. <code>is_plausible</code> is
 a question with one job, so it does not.</p>
 <p>See <a href="../judge/JevSelfRefineAdvisor/">JevSelfRefineAdvisor</a>.</p>
+<h2 id="ollamasystemonedemoapplication">OllamaSystemOneDemoApplication<a class="headerlink" href="#ollamasystemonedemoapplication" title="Permanent link">&para;</a></h2>
+<p>System One decisions from a local <a href="https://ollama.com/blog/ollama-now-supports-jev-style-decision-models">Ollama</a>
+instead of the hosted Jev API. Ollama 0.35 serves Jev-style decision models (<code>nimble</code>,
+<code>tev1</code>, <code>tev1:0.8b</code>) on the same <code>POST /v1/systemone</code> protocol, so the starter's
+<code>TypeSafeClient</code> works against it unchanged. The <code>ollama</code> profile, which the demo activates
+itself, only points <code>spring.ai.typesafe.base-url</code> at <code>http://localhost:11434</code>. No API key
+is needed. See <a href="../client/Ollama/">Using Ollama</a> for the setup and how its answers compare.</p>
+<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>nimble
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>mvn<span class="w"> </span>-pl<span class="w"> </span>examples<span class="w"> </span>spring-boot:run<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">    </span>-Dspring-boot.run.main-class<span class="o">=</span>org.springaicommunity.typesafe.demo.ollama.OllamaSystemOneDemoApplication
+</span></code></pre></div>
+<p>Set <code>OLLAMA_SYSTEMONE_MODEL=tev1</code> (or <code>tev1:0.8b</code>) to try a smaller model. The demo asks the
+three primitives about one ticket, timing a first and a warm call, then runs a <code>JevJudge</code>
+over a plausible and an impossible temperature:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>Ollama System One, model nimble
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>Ticket: The deploy failed twice and customers are seeing 500 errors. We need someone on this now.
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>  urgent   : 1.00
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>  team     : infra (confidence 0.80) {infra=0.95, billing=0.04, support=0.01}
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>  severity : 1.79 -&gt; Full outage (confidence 0.49)
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>  time     : 577 ms first call, 437 ms warm
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>Answer : It is 15 degrees Celsius in Paris.
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>Verdict: passed=true [is_plausible=PASSED, helpfulness=PASSED]
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>Answer : It is -255 degrees Celsius in Paris.
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>Verdict: passed=false [is_plausible=FAILED, helpfulness=FAILED]
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>  - is_plausible: A temperature is impossible, ... (scored 0.00, needs at least 0.70)
+</span></code></pre></div>
+<p>The timings are from an Apple M3 Max; a model Ollama has to load first takes longer. On
+this workload <code>nimble</code> catches the impossible temperature outright, where
+<a href="../client/Laya/#criteria-that-need-world-knowledge">Laya</a> does not, but thresholds tuned on
+Jev still need checking on any other model; see <a href="../client/Ollama/#how-it-compares">how it compares</a>.</p>
 <h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../">Home</a></li>

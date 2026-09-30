@@ -672,6 +672,8 @@
       
         
       
+        
+      
     
     
     
@@ -960,6 +962,34 @@
     
   
     Using Laya
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Ollama/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using Ollama
   
 
     
@@ -1997,10 +2027,10 @@ in turn. Three do not, and each earns its place:</p>
 </tr>
 </tbody>
 </table>
-<p>The table describes the hosted API. A compatible server such as <a href="../Laya/">Laya</a> may send
-<code>detail</code> as a plain string for every status, so <code>errorType()</code> can be <code>null</code> and
-<code>validationErrors()</code> empty, while <code>errorMessage()</code> is still set; see
-<a href="../Laya/#what-differs">what differs</a>.</p>
+<p>The table describes the hosted API. A compatible server may send another shape: <code>detail</code> as
+a plain string for every status (<a href="../Laya/#what-differs">Laya</a>), or <code>{"error": "..."}</code>
+(<a href="../Ollama/#what-differs">Ollama</a>). The status still maps to the right exception and
+<code>errorMessage()</code> is set, but <code>errorType()</code> can be <code>null</code> and <code>validationErrors()</code> empty.</p>
 <div class="highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">TypeSafeApiException</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="n">log</span><span class="p">.</span><span class="na">warn</span><span class="p">(</span><span class="s">"{} failed: {} [{}] (request {})"</span><span class="p">,</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">            </span><span class="n">ex</span><span class="p">.</span><span class="na">endpoint</span><span class="p">(),</span><span class="w"> </span><span class="n">ex</span><span class="p">.</span><span class="na">errorMessage</span><span class="p">(),</span><span class="w"> </span><span class="n">ex</span><span class="p">.</span><span class="na">errorType</span><span class="p">(),</span><span class="w"> </span><span class="n">ex</span><span class="p">.</span><span class="na">requestId</span><span class="p">());</span>

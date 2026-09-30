@@ -14,7 +14,7 @@
         <link rel="prev" href="../SpringBootStarter/">
       
       
-        <link rel="next" href="../../judge/JevJudge/">
+        <link rel="next" href="../Ollama/">
       
       
         
@@ -672,6 +672,8 @@
       
         
       
+        
+      
     
     
     
@@ -960,6 +962,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#other-compatible-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other compatible servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#integration-tests-against-laya" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -985,6 +998,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Ollama/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using Ollama
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1835,6 +1876,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#other-compatible-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other compatible servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#integration-tests-against-laya" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2104,6 +2156,10 @@ question 0.97 against 0.02.</p>
 criterion depends on exactly this, isn't a meaningful test of Laya: it often passes an
 impossible temperature. On Laya, check such things in code instead, with a
 <a href="../../judge/JevJudge/#code-criteria">code criterion</a> such as "no temperature below −90 °C".</p>
+<h2 id="other-compatible-servers">Other compatible servers<a class="headerlink" href="#other-compatible-servers" title="Permanent link">&para;</a></h2>
+<p>Laya is not the only local option. Ollama 0.35 and later serve Jev-style decision models
+(<code>nimble</code>, <code>tev1</code>) on the same <code>/v1/systemone</code> protocol; see <a href="../Ollama/">Using Ollama</a>. Its
+<code>nimble</code> model is much stronger than Laya on criteria that need world knowledge.</p>
 <h2 id="integration-tests-against-laya">Integration tests against Laya<a class="headerlink" href="#integration-tests-against-laya" title="Permanent link">&para;</a></h2>
 <p>The live ITs follow <code>TYPESAFE_BASE_URL</code>, so they run against Laya too:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">TYPESAFE_BASE_URL</span><span class="o">=</span>http://localhost:8002<span class="w"> </span><span class="nv">TYPESAFE_API_KEY</span><span class="o">=</span>local-test<span class="w"> </span><span class="se">\</span>

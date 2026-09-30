@@ -788,6 +788,8 @@
       
         
       
+        
+      
     
     
     
@@ -960,6 +962,34 @@
     
   
     Using Laya
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../client/Ollama/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Using Ollama
   
 
     
@@ -1969,7 +1999,8 @@ from either kind, the gate through <code>decide(ChoiceAnswer)</code> or the raw
 anything genuinely undecided away from automation; above it, expensive actions demand more
 than cheap ones.</p>
 <p>Thresholds are properties of the model that answers. Tuned on Jev, they don't carry over to
-another backend such as <a href="../../client/Laya/">Laya</a>; measure them again there.</p>
+another backend such as <a href="../../client/Ollama/">Ollama</a> or <a href="../../client/Laya/">Laya</a>;
+measure them again there.</p>
 <p><a href="../../patterns/JevConfidenceGate/"><code>JevConfidenceGate</code></a> holds that policy in one place:</p>
 <div class="highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">JevConfidenceGate</span><span class="w"> </span><span class="n">gate</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">JevConfidenceGate</span><span class="p">.</span><span class="na">builder</span><span class="p">()</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">    </span><span class="p">.</span><span class="na">floor</span><span class="p">(</span><span class="mf">0.60d</span><span class="p">)</span><span class="w">                    </span><span class="c1">// nothing acts unattended below this</span>
