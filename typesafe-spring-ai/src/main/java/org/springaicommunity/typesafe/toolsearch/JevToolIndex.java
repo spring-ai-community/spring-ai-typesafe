@@ -32,6 +32,7 @@ import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Question;
+import org.springaicommunity.typesafe.response.ChoiceAnswer;
 import org.springaicommunity.typesafe.response.SystemOneResponse;
 
 import org.springframework.ai.tool.toolsearch.ToolIndex;
@@ -162,12 +163,15 @@ public class JevToolIndex implements ToolIndex {
 		candidates.forEach(candidate -> byName.put(candidate.toolName(), candidate));
 
 		// optionsAbove returns the labels in descending probability, which is the ranking.
-		List<String> ranked = response.choice(SELECTION_QUESTION).optionsAbove(this.minimumRelevance);
-		if (ranked.isEmpty()) {
+		ChoiceAnswer bestTool = response.choice(SELECTION_QUESTION);
+		List<String> ranked = bestTool.optionsAbove(this.minimumRelevance);
+		if (ranked.isEmpty() && bestTool.probabilities().isEmpty()) {
 			// probabilities defaults to empty when the response omits the field, which would
 			// otherwise discard a selection the service did make. The chosen label is the
-			// answer either way, so fall back to it rather than reporting no tools.
-			ranked = List.of(response.choiceValue(SELECTION_QUESTION));
+			// answer then, so fall back to it rather than reporting no tools. With
+			// probabilities present, an empty ranking means no tool cleared minimumRelevance,
+			// and that stands.
+			ranked = List.of(bestTool.value());
 		}
 		List<ToolReference> matches = new ArrayList<>();
 		int limit = limit(toolSearchRequest, candidates.size());
@@ -210,7 +214,16 @@ public class JevToolIndex implements ToolIndex {
 		}
 		String category = toolSearchRequest.categoryFilter();
 		if (StringUtils.hasText(category)) {
-			candidates = candidates.stream().filter(candidate -> matchesCategory(candidate, category)).toList();
+			List<ToolReference> inCategory = candidates.stream()
+				.filter(candidate -> matchesCategory(candidate, category))
+				.toList();
+			// The category is free text the model writes. It narrows the candidates when it
+			// matches some; one that matches none must not hide every tool, so it is ignored
+			// and the question is asked over the whole session.
+			if (!inCategory.isEmpty()) {
+				return inCategory;
+			}
+			logger.debug("Jev tool search ignored category '{}', which matches no indexed tool", category);
 		}
 		return candidates;
 	}

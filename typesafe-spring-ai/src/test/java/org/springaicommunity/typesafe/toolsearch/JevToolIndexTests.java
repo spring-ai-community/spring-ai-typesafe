@@ -161,21 +161,61 @@ class JevToolIndexTests {
 	}
 
 	@Test
-	void narrowsCandidatesByCategoryBeforeAsking() {
+	void returnsNothingWhenNoToolClearsTheRelevanceFloor() {
+		// Some tool applies, but none stands out. The fallback for a response without
+		// probabilities must not hand back the top label here.
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
-			// Only the two billing-ish tools should reach the choice.
-			.andExpect(jsonPath("$.questions.best_tool.criteria.currentWeather").doesNotExist())
+			.andRespond(MockTypeSafeServer.jsonResponse(response(0.95d, 0.40d, 0.35d, 0.25d)));
+
+		JevToolIndex picky = JevToolIndex.builder(this.mock.client()).minimumRelevance(0.5d).build();
+		picky.indexTools(SESSION, List.of(tool("currentWeather", "Returns the current weather for a place"),
+				tool("sendEmail", "Sends an email to a recipient"),
+				tool("createInvoice", "Creates an invoice for a customer")));
+
+		ToolSearchResponse response = picky.search(new ToolSearchRequest(SESSION, "do something", null, null));
+
+		assertThat(response.toolReferences()).isEmpty();
+	}
+
+	@Test
+	void narrowsCandidatesByCategoryBeforeAsking() {
+		JevToolIndex billing = JevToolIndex.builder(this.mock.client()).build();
+		billing.indexTools(SESSION,
+				List.of(tool("currentWeather", "Returns the current weather for a place"),
+						tool("createInvoice", "Creates an invoice for a customer"),
+						tool("remindCustomer", "Emails a reminder about an unpaid invoice")));
+
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			// Only the two tools matching "invoice" reach the choice.
+			.andExpect(MockTypeSafeServer.keyOrder("/questions/best_tool/criteria", "createInvoice", "remindCustomer"))
 			.andRespond(MockTypeSafeServer.jsonResponse(
 					"{\"model\":\"jev-1.13.0\",\"answers\":{\"any_tool_applies\":{\"type\":\"noul\",\"noul\":0.9},"
 							+ "\"best_tool\":{\"type\":\"choice\",\"choice\":\"createInvoice\","
-							+ "\"probabilities\":{\"createInvoice\":0.8,\"sendEmail\":0.2},\"confidence\":0.8}},"
+							+ "\"probabilities\":{\"createInvoice\":0.8,\"remindCustomer\":0.2},\"confidence\":0.8}},"
 							+ "\"usage\":{}}"));
 
-		ToolSearchResponse response = this.index
+		ToolSearchResponse response = billing
 			.search(new ToolSearchRequest(SESSION, "bill the customer", null, "invoice"));
 
-		assertThat(response.toolReferences()).extracting(ToolReference::toolName).contains("createInvoice");
+		assertThat(response.toolReferences()).extracting(ToolReference::toolName)
+			.containsExactly("createInvoice", "remindCustomer");
+	}
+
+	@Test
+	void ignoresACategoryThatMatchesNoTool() {
+		// The category is free text the model writes; one it invents must not hide every tool.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(MockTypeSafeServer.keyOrder("/questions/best_tool/criteria", "currentWeather", "sendEmail",
+					"createInvoice"))
+			.andRespond(MockTypeSafeServer.jsonResponse(response(0.95d, 0.05d, 0.05d, 0.90d)));
+
+		ToolSearchResponse response = this.index
+			.search(new ToolSearchRequest(SESSION, "bill the customer", null, "finance"));
+
+		assertThat(response.toolReferences().get(0).toolName()).isEqualTo("createInvoice");
 	}
 
 	@Test

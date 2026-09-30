@@ -73,7 +73,7 @@ once a person phrases it naturally. The last row is the one that needs the secon
 | Builder method | Type | Default | Description |
 |---|---|---|---|
 | `applicabilityThreshold(double)` | `double` | `0.5` | How sure the service must be that *some* tool fits before any is returned. Raise it where calling the wrong tool is worse than calling none. |
-| `minimumRelevance(double)` | `double` | `0.0` | Drop tools below this share of the distribution. At zero, every candidate is returned in ranked order. |
+| `minimumRelevance(double)` | `double` | `0.0` | Drop tools below this share of the distribution. At zero, every candidate is returned in ranked order. When no tool reaches it, none is returned. |
 
 ## Sessions and categories
 
@@ -86,8 +86,9 @@ index.clearIndex(sessionId);
 ```
 
 An unknown or empty session returns an empty result **without a call**. A
-`categoryFilter` on the request narrows the candidates before the question is asked, so
-the choice only ever contains tools that passed the filter.
+`categoryFilter` on the request narrows the candidates before the question is asked: tools
+whose name or summary contains it. The category is free text the model writes, so one that
+matches no tool is ignored rather than hiding every tool.
 
 A session holding exactly one tool skips the choice entirely — a choice between one option
 is not a question worth asking — and asks only whether that tool applies.
