@@ -48,6 +48,7 @@ nav:
     - Errors and Retries: client/ErrorsAndRetries.md
     - Spring Boot Starter: client/SpringBootStarter.md
     - Using Laya: client/Laya.md
+    - Using Ollama: client/Ollama.md
   - Model-as-a-Judge:
     - JevJudge: judge/JevJudge.md
     - JevSelfRefineAdvisor: judge/JevSelfRefineAdvisor.md

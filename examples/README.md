@@ -1,6 +1,6 @@
 # Examples
 
-Seven runnable entry points. Run `mvn install -DskipTests` from the reactor root first, so the
+Eight runnable entry points. Run `mvn install -DskipTests` from the reactor root first, so the
 other modules are resolvable; `spring-boot:run` is a single-module goal, so it takes
 `-pl examples` without `-am`.
 
@@ -13,8 +13,9 @@ other modules are resolvable; `spring-boot:run` is a single-module goal, so it t
 | [`CascadeDemo`](#cascadedemo) | Jev as the gate in a cheap-model-first cascade | `TYPESAFE_API_KEY` |
 | [`GuardrailDemo`](#guardraildemo) | screening a turn in both directions | `TYPESAFE_API_KEY` |
 | [`ModelJudgeDemoApplication`](#modeljudgedemoapplication) | the self-refine judge loop | both keys |
+| [`OllamaSystemOneDemoApplication`](#ollamasystemonedemoapplication) | the same client against a local Ollama | no key, Ollama 0.35+ |
 
-Only the last one needs `ANTHROPIC_API_KEY`.
+Only `ModelJudgeDemoApplication` needs `ANTHROPIC_API_KEY`, and the Ollama demo needs no key at all.
 
 ## `JevQuickstart`
 
@@ -213,3 +214,18 @@ a question with one job, so it does not.
 
 Both need a real API key. `WeatherJudgeTests` exercises the same judge offline against
 `MockRestServiceServer`, including the impossible-temperature case.
+
+## `OllamaSystemOneDemoApplication`
+
+The same `TypeSafeClient`, pointed at a local Ollama 0.35 or later, which serves Jev-style
+decision models on the same `/v1/systemone` protocol. The `ollama` profile sets the base
+URL; no API key is needed.
+
+```bash
+ollama pull nimble
+mvn -pl examples spring-boot:run \
+    -Dspring-boot.run.main-class=org.springaicommunity.typesafe.demo.ollama.OllamaSystemOneDemoApplication
+```
+
+It asks a noul, a choice and a score about one ticket, then judges a plausible and an
+impossible temperature with `JevJudge`. `OLLAMA_SYSTEMONE_MODEL` picks another model.

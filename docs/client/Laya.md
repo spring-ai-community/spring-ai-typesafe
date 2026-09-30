@@ -124,6 +124,12 @@ criterion depends on exactly this, isn't a meaningful test of Laya: it often pas
 impossible temperature. On Laya, check such things in code instead, with a
 [code criterion](../judge/JevJudge.md#code-criteria) such as "no temperature below −90 °C".
 
+## Other compatible servers
+
+Laya is not the only local option. Ollama 0.35 and later serve Jev-style decision models
+(`nimble`, `tev1`) on the same `/v1/systemone` protocol; see [Using Ollama](Ollama.md). Its
+`nimble` model is much stronger than Laya on criteria that need world knowledge.
+
 ## Integration tests against Laya
 
 The live ITs follow `TYPESAFE_BASE_URL`, so they run against Laya too:

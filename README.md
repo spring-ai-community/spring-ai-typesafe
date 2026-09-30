@@ -49,7 +49,7 @@ The three primitives — `Noul`, `Choice` and `Score` — are described in
 | `typesafe-spring-ai` | `JevJudge`, the advisors, and the RAG and tool-search integrations, on Spring AI's own SPIs |
 | `spring-ai-starter-typesafe` | `spring.ai.typesafe.*` properties and an auto-configured `TypeSafeClient` bean |
 | `typesafe-bom` | Bill of materials for the three above |
-| `examples` | Seven runnable demos |
+| `examples` | Eight runnable demos |
 
 ## Quick start
 

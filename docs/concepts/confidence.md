@@ -88,7 +88,8 @@ anything genuinely undecided away from automation; above it, expensive actions d
 than cheap ones.
 
 Thresholds are properties of the model that answers. Tuned on Jev, they don't carry over to
-another backend such as [Laya](../client/Laya.md); measure them again there.
+another backend such as [Ollama](../client/Ollama.md) or [Laya](../client/Laya.md);
+measure them again there.
 
 [`JevConfidenceGate`](../patterns/JevConfidenceGate.md) holds that policy in one place:
 

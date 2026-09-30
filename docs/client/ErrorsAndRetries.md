@@ -62,10 +62,10 @@ Error bodies arrive in a single `detail` envelope that takes three shapes, all r
 | 422 | an array | `validationErrors()`, each with `type()`, `loc()`, `path()` and `msg()` |
 | 404 | a string | `errorMessage()` |
 
-The table describes the hosted API. A compatible server such as [Laya](Laya.md) may send
-`detail` as a plain string for every status, so `errorType()` can be `null` and
-`validationErrors()` empty, while `errorMessage()` is still set; see
-[what differs](Laya.md#what-differs).
+The table describes the hosted API. A compatible server may send another shape: `detail` as
+a plain string for every status ([Laya](Laya.md#what-differs)), or `{"error": "..."}`
+([Ollama](Ollama.md#what-differs)). The status still maps to the right exception and
+`errorMessage()` is set, but `errorType()` can be `null` and `validationErrors()` empty.
 
 ```java
 catch (TypeSafeApiException ex) {

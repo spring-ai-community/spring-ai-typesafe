@@ -1,6 +1,6 @@
 # Demos
 
-Seven runnable entry points in `examples`. Run `mvn install -DskipTests` from the reactor root
+Eight runnable entry points in `examples`. Run `mvn install -DskipTests` from the reactor root
 first, so the other modules are resolvable; `spring-boot:run` is a single-module goal, so it
 takes `-pl examples` **without** `-am`.
 
@@ -13,8 +13,9 @@ takes `-pl examples` **without** `-am`.
 | [CascadeDemo](#cascadedemo) | Jev as the gate in a cheap-model-first cascade | `TYPESAFE_API_KEY` |
 | [GuardrailDemo](#guardraildemo) | screening a turn in both directions | `TYPESAFE_API_KEY` |
 | [ModelJudgeDemoApplication](#modeljudgedemoapplication) | the self-refine judge loop | both keys |
+| [OllamaSystemOneDemoApplication](#ollamasystemonedemoapplication) | the same client against a local Ollama | no key, Ollama 0.35+ |
 
-Only the last needs `ANTHROPIC_API_KEY`.
+Only `ModelJudgeDemoApplication` needs `ANTHROPIC_API_KEY`, and the Ollama demo needs no key at all.
 
 !!! tip "Running the demos against Laya"
     The plain demos build their client with `TypeSafeClient.builder()`, so they follow
@@ -217,6 +218,44 @@ tool said — a judge model asked for one overall rating usually passes it. `is_
 a question with one job, so it does not.
 
 See [JevSelfRefineAdvisor](judge/JevSelfRefineAdvisor.md).
+
+## OllamaSystemOneDemoApplication
+
+System One decisions from a local [Ollama](https://ollama.com/blog/ollama-now-supports-jev-style-decision-models)
+instead of the hosted Jev API. Ollama 0.35 serves Jev-style decision models (`nimble`,
+`tev1`, `tev1:0.8b`) on the same `POST /v1/systemone` protocol, so the starter's
+`TypeSafeClient` works against it unchanged. The `ollama` profile, which the demo activates
+itself, only points `spring.ai.typesafe.base-url` at `http://localhost:11434`. No API key
+is needed. See [Using Ollama](client/Ollama.md) for the setup and how its answers compare.
+
+```bash
+ollama pull nimble
+mvn -pl examples spring-boot:run \
+    -Dspring-boot.run.main-class=org.springaicommunity.typesafe.demo.ollama.OllamaSystemOneDemoApplication
+```
+
+Set `OLLAMA_SYSTEMONE_MODEL=tev1` (or `tev1:0.8b`) to try a smaller model. The demo asks the
+three primitives about one ticket, timing a first and a warm call, then runs a `JevJudge`
+over a plausible and an impossible temperature:
+
+```
+Ollama System One, model nimble
+Ticket: The deploy failed twice and customers are seeing 500 errors. We need someone on this now.
+  urgent   : 1.00
+  team     : infra (confidence 0.80) {infra=0.95, billing=0.04, support=0.01}
+  severity : 1.79 -> Full outage (confidence 0.49)
+  time     : 577 ms first call, 437 ms warm
+Answer : It is 15 degrees Celsius in Paris.
+Verdict: passed=true [is_plausible=PASSED, helpfulness=PASSED]
+Answer : It is -255 degrees Celsius in Paris.
+Verdict: passed=false [is_plausible=FAILED, helpfulness=FAILED]
+  - is_plausible: A temperature is impossible, ... (scored 0.00, needs at least 0.70)
+```
+
+The timings are from an Apple M3 Max; a model Ollama has to load first takes longer. On
+this workload `nimble` catches the impossible temperature outright, where
+[Laya](client/Laya.md#criteria-that-need-world-knowledge) does not, but thresholds tuned on
+Jev still need checking on any other model; see [how it compares](client/Ollama.md#how-it-compares).
 
 ## See Also
 
