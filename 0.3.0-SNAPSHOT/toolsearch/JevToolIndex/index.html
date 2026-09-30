@@ -2036,7 +2036,7 @@ once a person phrases it naturally. The last row is the one that needs the secon
 <td><code>minimumRelevance(double)</code></td>
 <td><code>double</code></td>
 <td><code>0.0</code></td>
-<td>Drop tools below this share of the distribution. At zero, every candidate is returned in ranked order.</td>
+<td>Drop tools below this share of the distribution. At zero, every candidate is returned in ranked order. When no tool reaches it, none is returned.</td>
 </tr>
 </tbody>
 </table>
@@ -2047,8 +2047,9 @@ once a person phrases it naturally. The last row is the one that needs the secon
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">index</span><span class="p">.</span><span class="na">clearIndex</span><span class="p">(</span><span class="n">sessionId</span><span class="p">);</span>
 </span></code></pre></div>
 <p>An unknown or empty session returns an empty result <strong>without a call</strong>. A
-<code>categoryFilter</code> on the request narrows the candidates before the question is asked, so
-the choice only ever contains tools that passed the filter.</p>
+<code>categoryFilter</code> on the request narrows the candidates before the question is asked: tools
+whose name or summary contains it. The category is free text the model writes, so one that
+matches no tool is ignored rather than hiding every tool.</p>
 <p>A session holding exactly one tool skips the choice entirely — a choice between one option
 is not a question worth asking — and asks only whether that tool applies.</p>
 <h2 id="scale">Scale<a class="headerlink" href="#scale" title="Permanent link">&para;</a></h2>
