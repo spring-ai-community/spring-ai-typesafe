@@ -2082,8 +2082,13 @@ malformed JSON — is translated too, as <code>TypeSafeApiResponseValidationExce
 <p><code>totalTimeout</code> counts the next attempt's own HTTP timeout, not just the wait before it,
 so a call never overruns the budget by a whole request. When the time left cannot fit
 another attempt, the last failure is thrown instead.</p>
-<p>Declare the transport's real timeout with <code>timeout(...)</code> even when you supply your own
-<code>RestClient.Builder</code>, since that is the figure the budget uses.</p>
+<p>So keep the per-attempt timeout well below the budget. With a timeout at or above it,
+no retry can ever fit and nothing is retried, not even an instant 429; the client logs
+a warning when it is built that way.</p>
+<p>Declare the transport's real timeout with <code>timeout(...)</code> when you supply your own
+<code>RestClient.Builder</code>, since that is the figure the budget uses. Left undeclared, the
+timeout of your transport is unknown, and the budget bounds only the waits between
+attempts.</p>
 </div>
 <h2 id="request-ids">Request ids<a class="headerlink" href="#request-ids" title="Permanent link">&para;</a></h2>
 <p>Every response carries <code>x-typesafe-request-id</code>, exposed as <code>response.requestId()</code> and
