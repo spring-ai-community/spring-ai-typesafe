@@ -2303,10 +2303,10 @@ once per turn:</p>
 <p>To screen once per turn instead, order the guardrail <em>outside</em> the self-refine advisor, for
 example <code>.order(BaseAdvisor.HIGHEST_PRECEDENCE + 150)</code>. It then sees the original request and
 the answer the turn finally settled on, and a refusal it returns cannot be retried away. The
-cost: an unsafe draft reaches the judge and costs a retry before it is caught. The default
-has a cost of its own: a blocked input returns the refusal, which the judge then scores and
-typically fails, so a blocked request can cost up to <code>maxRepeatAttempts</code> further rounds of
-screening and judging.</p>
+cost: an unsafe draft reaches the judge and costs a retry before it is caught.</p>
+<p>Either way a refusal is final. The refused response carries
+<code>JevGuardrailAdvisor.OUTCOME_CONTEXT_KEY</code> in its context, holding the outcome's name, and
+the self-refine advisor's default <code>skipEvaluationPredicate</code> neither judges nor retries it.</p>
 <h2 id="custom-batteries">Custom batteries<a class="headerlink" href="#custom-batteries" title="Permanent link">&para;</a></h2>
 <p>A battery is a set of hazards plus a severity rubric. Each hazard is a noul and the action
 its firing implies:</p>

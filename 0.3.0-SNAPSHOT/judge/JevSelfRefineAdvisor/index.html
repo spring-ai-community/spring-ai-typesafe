@@ -2034,8 +2034,8 @@ previous attempt, so feedback does not compound across attempts.</p>
 <tr>
 <td><code>skipEvaluationPredicate(BiPredicate&lt;ChatClientRequest, ChatClientResponse&gt;)</code></td>
 <td>—</td>
-<td>skips tool-call responses and <code>returnDirect</code> tool results</td>
-<td>Neither is the model's answer, so there is nothing to judge.</td>
+<td>skips tool-call responses, <code>returnDirect</code> tool results and guardrail refusals</td>
+<td>None is the model's answer, so there is nothing to judge.</td>
 </tr>
 <tr>
 <td><code>judgeErrorPolicy(JudgeErrorPolicy)</code></td>
@@ -2183,11 +2183,11 @@ alternative of screening once per turn.</p>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">    </span><span class="n">JevSelfRefineAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">().</span><span class="na">judge</span><span class="p">(</span><span class="n">judge</span><span class="p">).</span><span class="na">build</span><span class="p">(),</span><span class="w">          </span><span class="c1">// quality, retries</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="n">JevGuardrailAdvisor</span><span class="p">.</span><span class="na">builder</span><span class="p">(</span><span class="n">typeSafeClient</span><span class="p">).</span><span class="na">build</span><span class="p">())</span><span class="w">          </span><span class="c1">// safety, every attempt</span>
 </span></code></pre></div>
-<p>Retrying does not help a guardrail: an unsafe answer is not a draft. At these default orders,
-an input the guardrail blocks comes back as the refusal, which the judge then scores, and
-typically fails. So a blocked request can cost up to <code>maxRepeatAttempts</code> further rounds of
-screening and judging before the refusal is returned. Ordering the guardrail outside the
-self-refine advisor avoids that.</p>
+<p>Retrying does not help a guardrail: an unsafe answer is not a draft. So a turn the guardrail
+refuses is final. The refusal is marked in the response context
+(<code>JevGuardrailAdvisor.OUTCOME_CONTEXT_KEY</code>), and the default <code>skipEvaluationPredicate</code> does
+not judge or retry it. A custom predicate replaces that default, so keep the check if you
+write your own.</p>
 <h2 id="streaming">Streaming<a class="headerlink" href="#streaming" title="Permanent link">&para;</a></h2>
 <p><code>adviseStream</code> is unsupported and returns <code>Flux.error(UnsupportedOperationException)</code>. A
 verdict needs the whole answer, so there is nothing useful to emit incrementally.</p>
