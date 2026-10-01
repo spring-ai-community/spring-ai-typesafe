@@ -30,9 +30,10 @@ import org.springframework.util.Assert;
  * <p>
  * Jev's confidence marks where its errors are: a criterion whose probability does not
  * clearly support its verdict is far more often wrong than one that does. A
- * {@link JevJudge} built with {@link JevJudge.Builder#escalateTo(JevEscalation) escalateTo}
+ * {@link JevJudge} built with {@link JevJudge.Builder#escalateTo(JevEscalation, double) escalateTo}
  * keeps Jev's verdict on every criterion it answered decisively and hands only the rest
- * here, typically to an LLM-as-a-judge such as {@link ChatModelEscalation}. The expensive
+ * here, typically to an LLM-as-a-judge; the escalation demo's {@code ChatModelEscalation} is a
+ * reference implementation on any Spring AI chat model. The expensive
  * judge is paid for the uncertain criteria alone.
  *
  * <p>

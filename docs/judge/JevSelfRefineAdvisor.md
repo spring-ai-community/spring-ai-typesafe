@@ -168,12 +168,13 @@ The advisor itself needs no change.
 ```java
 JevJudge judge = JevJudge.builder(typeSafeClient)
     .noul("is_plausible", plausibleNoul, 0.7)
-    .escalateTo(ChatModelEscalation.builder(judgeChatModel).build())
+    .escalateTo(strongerJudge, 0.9)   // choose the threshold on your own labelled sample
     .build();
 ```
 
 Prefer a judge model other than the one being refined: a model grading its own answers
-tends to approve them.
+tends to approve them. Escalations run one after another inside the advisor's call, so
+each escalated criterion adds its latency to the turn.
 
 ## Ordering with the guardrail advisor
 

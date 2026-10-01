@@ -263,7 +263,7 @@ a JSON object.
 | `failOnError(boolean)` | `boolean` | `false` | Treat a criterion the service could not answer (`ERROR`) as a failure. |
 | `failFast(boolean)` | `boolean` | `false` | When a code check fails, skip the Jev call; the questions become `NOT_APPLICABLE`. |
 | `feedbackRenderer(Function<List<JevFinding>, String>)` | — | `JevJudge::defaultFeedback` | Replace the wording fed back to the model. |
-| `escalateTo(JevEscalation[, double])` | — | none; threshold `0.9` | Hand the criteria Jev was unsure about to a stronger judge. See [escalating uncertain criteria](#escalating-uncertain-criteria). |
+| `escalateTo(JevEscalation, double)` | — | none | Hand the criteria Jev was unsure about to a stronger judge, below the given support threshold. There is no default threshold. See [escalating uncertain criteria](#escalating-uncertain-criteria). |
 
 Criterion names must be unique across both kinds, and a judge needs at least one question
 criterion.
@@ -460,65 +460,63 @@ partial response costs you that one criterion, not the whole call.
 An undecided criterion doesn't block by default. That is the right call for an instrument
 failure, but low confidence is also where Jev's mistakes are. Li et al.,
 [*JEV-as-a-Judge: Accept When Confident, Escalate When Unsure*](https://arxiv.org/abs/2609.26550)
-(2026), compared Jev with sixteen LLM and reward-model judges:
+(2026, v3), measured both sides of that:
 
-- Jev was right on 47.7% of the judgements it gave less than 0.6 of its probability to, and
-  on 99.1% of those it gave all of it to.
+- Jev was right on 55.1% of the judgements it gave less than 0.6 of its probability to,
+  and on 97.8% of those it gave all of it to.
 - A cascade that keeps Jev's confident verdicts and sends the rest to a stronger LLM judge
-  kept 99% of that judge's accuracy at roughly half its fee.
+  escalated 31.5% of the items. It scored 93.4% against the stronger judge's 92.5% alone,
+  at about 41% of its fee.
 
-`escalateTo` makes a judge the first stage of that cascade:
+`escalateTo` makes a judge the first stage of that cascade. The threshold is a required
+argument:
 
 ```java
 JevJudge judge = JevJudge.builder(typeSafeClient)
     .score("helpfulness", helpfulnessScore, 2.0)
     .noul("is_plausible", plausibleNoul, 0.7)
-    .escalateTo(ChatModelEscalation.builder(strongerChatModel).build())
+    .escalateTo(strongerJudge, 0.9)
     .build();
 ```
 
 - **What is escalated:**
   - a question criterion whose answer errored or was `INCONCLUSIVE`
-  - one where less than the threshold (0.9 by default) of the probability supports Jev's
-    verdict. For a noul, that means neither its truth value nor its complement reaches the
-    threshold: a noul at 0.55 is escalated, one at 0.03 is not. This measures how sure Jev
-    is of the label, not how close the value is to the criterion's `minimum`.
-    With a `minimum` far from 0.5, a value just past it can still be kept.
+  - one where less than the threshold of the probability supports Jev's verdict. For a
+    noul, that means neither its truth value nor its complement reaches the threshold: at
+    0.9, a noul at 0.55 is escalated, one at 0.03 is not. This measures how sure Jev is of
+    the label, not how close the value is to the criterion's `minimum`.
   - Code checks, and criteria that didn't apply, never are.
 - **Who decides:** the escalation answers the same question, and the criterion's own
   `minimum` or accepted options judge that answer. The finding is marked `escalated`, and
   dependents (`whenChosen`, `whenPassed`) follow the escalated decision. When a criterion
   fails, the stronger judge's reason is appended to its feedback.
 - **When the stronger judge fails:** if the escalation throws or answers the wrong kind of
-  question, Jev's own finding stands and a warning is logged. A fallback outage doesn't fail
-  the call. The finding is marked `escalation() == FAILED` and reads
-  `(escalation failed)` in the summary, so a cascade that never works, for example because
-  of a wrong chat-model key, doesn't pass for one that does.
+  question, Jev's own finding stands, marked `(escalation failed)` in the summary, and a
+  warning is logged. A fallback outage doesn't fail the call.
 - **Cost:** you pay for one call to the stronger judge per escalated criterion, and nothing
   when Jev was confident throughout. The calls are made one after another, so each one also
-  adds its latency.
+  adds its latency. Inside a [self-refine loop](JevSelfRefineAdvisor.md) that latency is
+  paid on every judged turn.
 
-`ChatModelEscalation` is the shipped escalation: an LLM-as-a-judge on any Spring AI chat
-model. It asks the model to pick exactly one of the question's labels (`true`/`false`,
-an option, or a level index) and give a one-sentence reason. Its default system prompt tells
-the model to treat the state as data, not instructions, and not to prefer an answer for its
-length or style.
+The stronger judge is anything implementing `JevEscalation`, a single method returning a
+`Decision(answer, reason)`: an LLM judge, a human review queue, or a different model per
+criterion. The library ships no implementation. The
+[escalation demo](../demos.md#escalatingjudgedemoapplication) includes
+`ChatModelEscalation`, an LLM-as-a-judge on any Spring AI chat model, to copy and adapt.
 
-It takes a `ChatModel`, not a `ChatClient`, and talks to it through a plain client of its own
-with no advisors and no tools. An application's `ChatClient` would bring its defaults to
-every judging call: a `JevSelfRefineAdvisor` there would judge each judgement and escalate
-again. To see the judging calls in your traces and metrics, pass
-`observationRegistry(registry)` to its builder.
-
-Anything else can implement `JevEscalation`, a single method returning a
-`Decision(answer, reason)`: a human review queue, or a different model per criterion.
-
-!!! tip "Choose the threshold on your own workload"
-    The paper found that thresholds and calibration don't transfer between workloads. Label
-    a few dozen examples and pick the lowest threshold that keeps the accuracy you need.
-    Escalation also can't catch what Jev gets wrong confidently, such as an elaborately
-    written wrong answer. For correctness that can be checked, use a
-    [code criterion](#code-criteria) or give the judge the reference in `expected_output`.
+!!! warning "Choose the threshold on your own workload, and expect a small gain"
+    - **There is no safe default.** In the same study, a threshold of 0.9 escalated 24.8% of
+      RewardBench pairs and added 1.27 points, but escalated 64.8% of JudgeBench pairs and
+      *lost* 0.74 points. The authors pick it on about 100 labelled examples from the target
+      workload, keeping the lowest threshold whose 95% lower confidence bound stays within
+      two points of the accuracy you need.
+    - **The gain is around a point.** Escalation buys back most of a stronger judge's
+      accuracy for less than half its fee. It does not make the cascade much better than
+      that judge.
+    - **It can't fix shared mistakes.** A confidently wrong Jev verdict is never escalated,
+      and the stronger judge often makes the same mistakes: style-adversarial answers and
+      reference-free prose fool both. For correctness that can be checked, use a
+      [code criterion](#code-criteria), or give the judge the reference in `expected_output`.
 
 ## Testing with JevJudge
 

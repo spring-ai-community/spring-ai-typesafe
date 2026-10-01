@@ -4,21 +4,22 @@
 
 ### New
 
-- **Escalating uncertain criteria:** `JevJudge.Builder.escalateTo(JevEscalation[, threshold])`
-  hands the criteria Jev was unsure about (errored, inconclusive, or below the threshold,
-  0.9 by default) to a stronger judge. Confident verdicts are kept; the stronger judge's
-  answer is judged by the criterion's own rule. `ChatModelEscalation` is the LLM-as-a-judge
-  implementation. It follows Li et al.,
+- **Escalating uncertain criteria:** `JevJudge.Builder.escalateTo(JevEscalation, threshold)`
+  hands the criteria Jev was unsure about (errored, inconclusive, or below the threshold)
+  to a stronger judge. Confident verdicts are kept; the stronger judge's answer is judged
+  by the criterion's own rule, and dependents follow it. There is no default threshold:
+  choose it on a labelled sample of your own. It follows Li et al.,
   [JEV-as-a-Judge: Accept When Confident, Escalate When Unsure](https://arxiv.org/abs/2609.26550).
   See [Escalating uncertain criteria](judge/JevJudge.md#escalating-uncertain-criteria).
 - **Demo:** [`EscalatingJudgeDemoApplication`](demos.md#escalatingjudgedemoapplication) judges
-  four answers with and without escalation, side by side.
+  four answers with and without escalation, side by side. It includes `ChatModelEscalation`,
+  a reference LLM-as-a-judge escalation to copy and adapt.
 
 ### Breaking changes
 
 | Change | Migrate |
 |---|---|
-| **`JevFinding` has a fifth component, `escalation`** (`NONE`, `DECIDED` or `FAILED`). The four-argument constructor is kept. | Record patterns over `JevFinding` need the extra component. |
+| **`JevFinding` has a fifth component, `escalation`** (`NONE`, `DECIDED` or `FAILED`). The four-argument constructor is kept, so code that creates findings is unaffected. | Only record deconstruction patterns over `JevFinding` (Java 21+) need the extra component. |
 
 ## 0.3.0
 

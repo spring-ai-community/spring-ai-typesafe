@@ -22,7 +22,6 @@ import java.util.Map;
 
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.TypeSafeClient;
-import org.springaicommunity.typesafe.judge.ChatModelEscalation;
 import org.springaicommunity.typesafe.judge.JevEscalation;
 import org.springaicommunity.typesafe.judge.JevFinding;
 import org.springaicommunity.typesafe.judge.JevJudge;
@@ -51,8 +50,9 @@ import org.springframework.context.annotation.Bean;
  *
  * <p>
  * The pattern follows Li et al., <em>JEV-as-a-Judge: Accept When Confident, Escalate When
- * Unsure</em> (arXiv:2609.26550). The escalation threshold is the default, 0.9; the right
- * value depends on the workload.
+ * Unsure</em> (arXiv:2609.26550). The escalation goes through {@link ChatModelEscalation},
+ * a reference implementation in this package, at a threshold of 0.9; the right value
+ * depends on the workload.
  *
  * <p>
  * Needs {@code TYPESAFE_API_KEY} and {@code ANTHROPIC_API_KEY} in the environment.
@@ -61,6 +61,12 @@ import org.springframework.context.annotation.Bean;
  */
 @SpringBootApplication
 public class EscalatingJudgeDemoApplication {
+
+	/**
+	 * The threshold Li et al. (2026) use on their reward-model benchmark. It does not
+	 * transfer between workloads; pick yours on a labelled sample of your own.
+	 */
+	private static final double THRESHOLD = 0.9d;
 
 	private static final String PENS = "A shop sells pens at 3 for 2.40. How much do 7 pens cost?";
 
@@ -93,7 +99,7 @@ public class EscalatingJudgeDemoApplication {
 		return args -> {
 			RecordingEscalation escalation = new RecordingEscalation(ChatModelEscalation.builder(chatModel).build());
 			JevJudge jevAlone = criteria(JevJudge.builder(typeSafeClient)).build();
-			JevJudge cascade = criteria(JevJudge.builder(typeSafeClient)).escalateTo(escalation).build();
+			JevJudge cascade = criteria(JevJudge.builder(typeSafeClient)).escalateTo(escalation, THRESHOLD).build();
 
 			int escalated = 0;
 			int changed = 0;

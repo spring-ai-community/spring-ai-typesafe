@@ -82,7 +82,7 @@ import org.springframework.util.Assert;
  * }</pre>
  *
  * <p>
- * Built with {@link Builder#escalateTo(JevEscalation) escalateTo}, the judge becomes the
+ * Built with {@link Builder#escalateTo(JevEscalation, double) escalateTo}, the judge becomes the
  * first stage of a cascade: it keeps Jev's verdict wherever Jev was confident and hands
  * the criteria it was unsure about to a stronger judge.
  *
@@ -96,15 +96,6 @@ public class JevJudge {
 	 * pass and fail supports it at 50%.
 	 */
 	public static final double DEFAULT_MIN_CONFIDENCE = 0.6d;
-
-	/**
-	 * The default escalation threshold: a criterion is handed to the
-	 * {@link JevEscalation} unless at least 90% of its probability supports Jev's
-	 * verdict. It is the threshold of the frozen cascades in Li et al., <em>JEV-as-a-Judge:
-	 * Accept When Confident, Escalate When Unsure</em> (2026), which kept 99% of the
-	 * stronger judge's accuracy at roughly half its fee; validate it on your own workload.
-	 */
-	public static final double DEFAULT_ESCALATION_THRESHOLD = 0.9d;
 
 	private static final Logger logger = LoggerFactory.getLogger(JevJudge.class);
 
@@ -698,7 +689,7 @@ public class JevJudge {
 
 		private @Nullable JevEscalation escalation;
 
-		private double escalationThreshold = DEFAULT_ESCALATION_THRESHOLD;
+		private double escalationThreshold;
 
 		private Builder(TypeSafeClient typeSafeClient) {
 			Assert.notNull(typeSafeClient, "typeSafeClient must not be null");
@@ -857,17 +848,6 @@ public class JevJudge {
 		}
 
 		/**
-		 * Escalates the criteria Jev is unsure about to a stronger judge, at
-		 * {@link #DEFAULT_ESCALATION_THRESHOLD}; see
-		 * {@link #escalateTo(JevEscalation, double)}.
-		 * @param escalation the stronger judge
-		 * @return this builder
-		 */
-		public Builder escalateTo(JevEscalation escalation) {
-			return escalateTo(escalation, DEFAULT_ESCALATION_THRESHOLD);
-		}
-
-		/**
 		 * Escalates the criteria Jev is unsure about to a stronger judge: accept when
 		 * confident, escalate when unsure. A question criterion is escalated when Jev's
 		 * answer errored or was inconclusive, or when less than {@code threshold} of its
@@ -877,8 +857,11 @@ public class JevJudge {
 		 * it. Code checks and criteria that did not apply are never escalated.
 		 *
 		 * <p>
-		 * The threshold trades cost for accuracy and does not transfer between workloads:
-		 * choose it on a small labelled sample of your own.
+		 * There is deliberately no default threshold. It trades cost for accuracy, and the
+		 * same value escalates very different shares of criteria on different workloads —
+		 * in Li et al. (2026) 0.9 escalated a quarter of one benchmark and two thirds of
+		 * another, and lowered accuracy on the second. Choose it on about a hundred
+		 * labelled examples of your own.
 		 * @param escalation the stronger judge
 		 * @param threshold the support at or above which Jev's verdict is kept, between
 		 * {@code 0} and {@code 1}

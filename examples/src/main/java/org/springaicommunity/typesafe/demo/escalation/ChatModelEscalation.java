@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.springaicommunity.typesafe.judge;
+package org.springaicommunity.typesafe.demo.escalation;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +23,7 @@ import java.util.Map;
 import io.micrometer.observation.ObservationRegistry;
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.JsonContent;
+import org.springaicommunity.typesafe.judge.JevEscalation;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.NoulCriteria;
@@ -42,6 +43,10 @@ import org.springframework.util.Assert;
  * was unsure about.
  *
  * <p>
+ * A reference implementation for the escalation demo, not part of the library: copy it and
+ * adapt its prompt to your own criteria.
+ *
+ * <p>
  * The model is asked the question Jev was asked, against the same state, and must pick
  * exactly one of its labels: {@code true} or {@code false} for a noul, an option for a
  * choice, a level index for a score. The label becomes an answer carrying all its
@@ -51,7 +56,7 @@ import org.springframework.util.Assert;
  * <pre>{@code
  * JevJudge judge = JevJudge.builder(typeSafeClient)
  *     .noul("is_plausible", plausible, 0.7)
- *     .escalateTo(ChatModelEscalation.builder(anthropicChatModel).build())
+ *     .escalateTo(ChatModelEscalation.builder(anthropicChatModel).build(), 0.9)
  *     .build();
  * }</pre>
  *

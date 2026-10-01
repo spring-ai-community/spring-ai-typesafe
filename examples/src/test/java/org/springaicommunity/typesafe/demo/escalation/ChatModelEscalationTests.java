@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.springaicommunity.typesafe.judge;
+package org.springaicommunity.typesafe.demo.escalation;
 
 import java.util.List;
 import java.util.Map;
@@ -26,6 +26,7 @@ import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.ScriptedChatModel;
+import org.springaicommunity.typesafe.judge.JevEscalation;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
 import org.springaicommunity.typesafe.question.Score;

@@ -845,7 +845,7 @@ class JevJudgeTests {
 
 		JevVerdict verdict = JevJudge.builder(this.mock.client())
 			.score("helpfulness", HELPFULNESS, 2.0d)
-			.escalateTo(escalation)
+			.escalateTo(escalation, 0.9d)
 			.build()
 			.judge("q", "a");
 
@@ -869,7 +869,7 @@ class JevJudgeTests {
 		JevVerdict verdict = JevJudge.builder(this.mock.client())
 			.choice("mode", MODE, "answered")
 			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
-			.escalateTo(escalation)
+			.escalateTo(escalation, 0.9d)
 			.build()
 			.judge("q", "a");
 
@@ -914,7 +914,7 @@ class JevJudgeTests {
 		JevVerdict verdict = JevJudge.builder(this.mock.client())
 			.score("helpfulness", HELPFULNESS, 2.0d)
 			.noul("is_plausible", PLAUSIBLE, 0.7d)
-			.escalateTo(escalation)
+			.escalateTo(escalation, 0.9d)
 			.build()
 			.judge("q", "a");
 
@@ -931,7 +931,7 @@ class JevJudgeTests {
 		JevVerdict verdict = JevJudge.builder(this.mock.client())
 			.check("searched", input -> false, "no search was made")
 			.noul("is_plausible", PLAUSIBLE, 0.7d)
-			.escalateTo(escalation)
+			.escalateTo(escalation, 0.9d)
 			.build()
 			.judge("q", "a");
 
@@ -990,7 +990,7 @@ class JevJudgeTests {
 		JevVerdict verdict = JevJudge.builder(this.mock.client())
 			.score("helpfulness", HELPFULNESS, 2.0d)
 			.failOnInconclusive(true)
-			.escalateTo(escalation)
+			.escalateTo(escalation, 0.9d)
 			.build()
 			.judge("q", "a");
 
@@ -1011,7 +1011,7 @@ class JevJudgeTests {
 		JevVerdict verdict = JevJudge.builder(this.mock.client())
 			.choice("mode", MODE, "answered")
 			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
-			.escalateTo(escalation)
+			.escalateTo(escalation, 0.9d)
 			.build()
 			.judge("q", "a");
 
@@ -1030,7 +1030,7 @@ class JevJudgeTests {
 	private JevJudge escalatingJudge(JevEscalation escalation) {
 		return JevJudge.builder(this.mock.client())
 			.noul("is_plausible", PLAUSIBLE, 0.7d)
-			.escalateTo(escalation)
+			.escalateTo(escalation, 0.9d)
 			.build();
 	}
 
