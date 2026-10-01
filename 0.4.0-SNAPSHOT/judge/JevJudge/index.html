@@ -1173,6 +1173,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#testing-with-jevjudge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing with JevJudge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2030,6 +2041,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#testing-with-jevjudge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing with JevJudge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2651,6 +2673,39 @@ because it is split between two levels, yet both levels pass a <code>minimum</co
 </span></code></pre></div>
 <p>A criterion the service returns no answer for is reported as <code>ERROR</code> rather than thrown, so a
 partial response costs you that one criterion, not the whole call.</p>
+<h2 id="testing-with-jevjudge">Testing with JevJudge<a class="headerlink" href="#testing-with-jevjudge" title="Permanent link">&para;</a></h2>
+<p>A judge is a useful test oracle for an LLM feature. It can check meaning where
+<code>contains(...)</code> would be brittle, and it answers every criterion in one call. Asserting on
+<code>verdict.passed()</code> alone, however, fails with <em>Expecting value to be true but was false</em>,
+which hides which criterion failed. Pass the summary and the feedback as the assertion's
+description:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">JevVerdict</span><span class="w"> </span><span class="n">verdict</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">judge</span><span class="p">.</span><span class="na">judge</span><span class="p">(</span><span class="n">question</span><span class="p">,</span><span class="w"> </span><span class="n">answer</span><span class="p">);</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">assertThat</span><span class="p">(</span><span class="n">verdict</span><span class="p">.</span><span class="na">passed</span><span class="p">())</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">    </span><span class="p">.</span><span class="na">as</span><span class="p">(</span><span class="s">"%s%n%s"</span><span class="p">,</span><span class="w"> </span><span class="n">verdict</span><span class="p">.</span><span class="na">summary</span><span class="p">(),</span><span class="w"> </span><span class="n">verdict</span><span class="p">.</span><span class="na">feedback</span><span class="p">())</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">    </span><span class="p">.</span><span class="na">isTrue</span><span class="p">();</span>
+</span></code></pre></div>
+<p>A failure then names the criterion, the score it reached and the score it needed:</p>
+<div class="highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>[passed=false [helpfulness=PASSED, is_plausible=FAILED]
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>- is_plausible: At least one value is impossible (scored 0.04, needs at least 0.70)]
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>Expecting value to be true but was false
+</span></code></pre></div>
+<p>Pass the text as arguments, not as the description itself. AssertJ formats the description,
+so a <code>%</code> in a criterion's wording would break it.</p>
+<p>Three more habits make these tests trustworthy:</p>
+<ul>
+<li><strong>Build the test's judge with <code>failOnInconclusive(true)</code> and <code>failOnError(true)</code>.</strong> By
+  default a verdict passes when nothing <em>failed</em>, which suits a live
+  <a href="../JevSelfRefineAdvisor/">self-refine loop</a>. In a test it would let a criterion that Jev
+  never decided pass silently.</li>
+<li><strong>Assert on the failing criteria when you expect a failure</strong>, not just on <code>passed()</code>:
+  <code>assertThat(verdict.failures()).extracting(JevFinding::name).containsExactly("is_plausible")</code>.</li>
+<li><strong>Keep these tests out of an ordinary build.</strong> Each <code>judge(...)</code> is one billed call. This
+  repository puts them in <code>*IT</code> classes behind <code>-Pintegration-tests</code>, guarded by
+  <code>@EnabledIfEnvironmentVariable(named = "TYPESAFE_API_KEY", matches = ".+")</code>.</li>
+</ul>
+<p>For a criterion that sits close to its threshold, check how much it moves between runs with
+<a href="../../patterns/JevConsistency/">JevConsistency</a> before you build a test on it.</p>
 <h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../JevSelfRefineAdvisor/">JevSelfRefineAdvisor</a> — judge and retry inside a <code>ChatClient</code></li>
