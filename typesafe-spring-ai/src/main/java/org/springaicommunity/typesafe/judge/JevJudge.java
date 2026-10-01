@@ -91,6 +91,12 @@ public class JevJudge {
 	public static final double DEFAULT_MIN_CONFIDENCE = 0.6d;
 
 	/**
+	 * The default {@code noulMinConfidence}: 0.5, the least a noul can lean either way, so
+	 * no noul is undecided unless the caller asks for it.
+	 */
+	public static final double DEFAULT_NOUL_MIN_CONFIDENCE = 0.5d;
+
+	/**
 	 * The state field carrying what was asked; see {@link JevJudgeInput#QUESTION_FIELD}.
 	 */
 	public static final String QUESTION_FIELD = JevJudgeInput.QUESTION_FIELD;
@@ -107,6 +113,8 @@ public class JevJudge {
 
 	private final double minConfidence;
 
+	private final double noulMinConfidence;
+
 	private final boolean failOnInconclusive;
 
 	private final boolean failOnError;
@@ -119,11 +127,12 @@ public class JevJudge {
 	private final boolean needsInput;
 
 	private JevJudge(TypeSafeClient typeSafeClient, List<JevCriterion> criteria, double minConfidence,
-			boolean failOnInconclusive, boolean failOnError, boolean failFast,
+			double noulMinConfidence, boolean failOnInconclusive, boolean failOnError, boolean failFast,
 			Function<List<JevFinding>, String> feedbackRenderer) {
 		this.typeSafeClient = typeSafeClient;
 		this.criteria = List.copyOf(criteria);
 		this.minConfidence = minConfidence;
+		this.noulMinConfidence = noulMinConfidence;
 		this.failOnInconclusive = failOnInconclusive;
 		this.failOnError = failOnError;
 		this.failFast = failFast;
@@ -318,7 +327,7 @@ public class JevJudge {
 					format("%s: the service returned no answer for this criterion", criterion.name()));
 		}
 		if (answer instanceof NoulAnswer noul) {
-			return evaluateNoul(criterion, noul);
+			return evaluateNoul(criterion, noul, undecided);
 		}
 		if (answer instanceof ScoreAnswer score) {
 			return evaluateScore(criterion, score, undecided);
@@ -340,7 +349,17 @@ public class JevJudge {
 				this.failOnError ? JevFinding.Outcome.FAILED : JevFinding.Outcome.ERROR, detail);
 	}
 
-	private JevFinding evaluateNoul(QuestionCriterion criterion, NoulAnswer answer) {
+	private JevFinding evaluateNoul(QuestionCriterion criterion, NoulAnswer answer, Set<String> undecided) {
+		// A noul's value is its own certainty: 0.5 is a coin flip whatever the minimum, and
+		// a verdict drawn from it is noise. How far it leans either way is its support.
+		double support = Math.max(answer.value(), 1.0d - answer.value());
+		JevFinding.Outcome inconclusive = checkConfidence(support, this.noulMinConfidence);
+		if (inconclusive != null) {
+			undecided.add(criterion.name());
+			return new JevFinding(criterion, answer, inconclusive, format(
+					"%s: the answer did not lean clearly either way (scored %.2f, needs at least %.2f either way to decide)",
+					criterion.name(), answer.value(), this.noulMinConfidence));
+		}
 		if (answer.isTrue(criterion.minimum())) {
 			return new JevFinding(criterion, answer, JevFinding.Outcome.PASSED, "");
 		}
@@ -360,7 +379,7 @@ public class JevJudge {
 			undecided.add(criterion.name());
 			return new JevFinding(criterion, answer, inconclusive, format(
 					"%s: the rubric did not settle whether this reaches %.2f (%.2f of the probability supports the verdict, needs at least %.2f)",
-					criterion.name(), criterion.minimum(), support, this.minConfidence));
+					criterion.name(), requiredScore(criterion, answer), support, this.minConfidence));
 		}
 		if (passes) {
 			return new JevFinding(criterion, answer, JevFinding.Outcome.PASSED, "");
@@ -376,7 +395,7 @@ public class JevJudge {
 		String reached = describeLevel(criterion, answer, reachedLevel);
 		String required = describeLevel(criterion, answer, (int) Math.ceil(criterion.minimum()));
 		String detail = format("%s: rated \"%s\" (%.2f), needs to reach %.2f", criterion.name(), reached,
-				answer.value(), criterion.minimum());
+				answer.value(), requiredScore(criterion, answer));
 		if (!required.isEmpty()) {
 			detail += format(" which is \"%s\"", required);
 		}
@@ -408,6 +427,19 @@ public class JevJudge {
 	 * expected value alone can land on one side while most of the probability sits on the
 	 * other. Without probabilities, the value decides.
 	 */
+	/**
+	 * The score the criterion actually requires, as quoted in feedback. With
+	 * probabilities, a score passes on the mass at or above the first passing level, so a
+	 * fractional {@code minimum} such as 1.5 requires level 2 and is quoted as 2.00.
+	 * Without them, the value itself is compared, and the {@code minimum} stands as given.
+	 */
+	private static double requiredScore(QuestionCriterion criterion, ScoreAnswer answer) {
+		if (answer.probabilities().isEmpty() || total(answer.probabilities().values()) <= 0.0d) {
+			return criterion.minimum();
+		}
+		return Math.ceil(criterion.minimum());
+	}
+
 	static boolean scorePasses(QuestionCriterion criterion, ScoreAnswer answer) {
 		if (answer.probabilities().isEmpty() || total(answer.probabilities().values()) <= 0.0d) {
 			return answer.value() >= criterion.minimum();
@@ -486,7 +518,11 @@ public class JevJudge {
 	 * @return the outcome to report, or {@code null} when the verdict is decisive enough
 	 */
 	private JevFinding.@Nullable Outcome checkConfidence(double support) {
-		if (support >= this.minConfidence) {
+		return checkConfidence(support, this.minConfidence);
+	}
+
+	private JevFinding.@Nullable Outcome checkConfidence(double support, double threshold) {
+		if (support >= threshold) {
 			return null;
 		}
 		return this.failOnInconclusive ? JevFinding.Outcome.FAILED : JevFinding.Outcome.INCONCLUSIVE;
@@ -571,6 +607,8 @@ public class JevJudge {
 
 		private double minConfidence = DEFAULT_MIN_CONFIDENCE;
 
+		private double noulMinConfidence = DEFAULT_NOUL_MIN_CONFIDENCE;
+
 		private boolean failOnInconclusive = false;
 
 		private boolean failOnError = false;
@@ -596,10 +634,11 @@ public class JevJudge {
 		}
 
 		/**
-		 * Adds a score that passes when it reaches {@code minimum}.
+		 * Adds a score that passes when at least half of its probability is on the
+		 * levels at or above {@code minimum}; see {@link JevCriterion#score}.
 		 * @param name the name the answer will carry
 		 * @param score the question
-		 * @param minimum the inclusive lower bound
+		 * @param minimum the lowest passing level; a fraction rounds up to the next level
 		 * @return this builder
 		 */
 		public Builder score(String name, Score score, double minimum) {
@@ -674,7 +713,8 @@ public class JevJudge {
 		 * verdict's side of {@code minimum}, for a choice the mass on the accepted (or
 		 * the rejected) options — not the answer's own {@code confidence}, which is low
 		 * whenever the mass is split, even between two passing levels. Raise it for
-		 * consequential decisions and lower it for reversible ones; nouls are unaffected.
+		 * consequential decisions and lower it for reversible ones. Nouls have their own
+		 * {@link #noulMinConfidence(double)}.
 		 * @param minConfidence the inclusive lower bound, between {@code 0} and
 		 * {@code 1}; {@link #DEFAULT_MIN_CONFIDENCE} by default
 		 * @return this builder
@@ -682,6 +722,25 @@ public class JevJudge {
 		public Builder minConfidence(double minConfidence) {
 			Assert.isTrue(minConfidence >= 0.0d && minConfidence <= 1.0d, "minConfidence must be between 0 and 1");
 			this.minConfidence = minConfidence;
+			return this;
+		}
+
+		/**
+		 * Sets how far a noul must lean either way before its verdict is acted on: the
+		 * larger of its truth value and its complement. Below it, the noul is
+		 * {@link JevFinding.Outcome#INCONCLUSIVE}, like a choice or score below
+		 * {@link #minConfidence(double)}. At 0.6, a noul between 0.4 and 0.6 is undecided,
+		 * whatever its {@code minimum}: a value near 0.5 is a coin flip, not a defect to
+		 * feed back. Off by default ({@link #DEFAULT_NOUL_MIN_CONFIDENCE}), so existing
+		 * verdicts do not change.
+		 * @param noulMinConfidence the inclusive lower bound, between {@code 0.5} and
+		 * {@code 1}
+		 * @return this builder
+		 */
+		public Builder noulMinConfidence(double noulMinConfidence) {
+			Assert.isTrue(noulMinConfidence >= 0.5d && noulMinConfidence <= 1.0d,
+					"noulMinConfidence must be between 0.5 and 1");
+			this.noulMinConfidence = noulMinConfidence;
 			return this;
 		}
 
@@ -741,7 +800,8 @@ public class JevJudge {
 			// the verdict without a response to carry.
 			Assert.isTrue(this.criteria.stream().anyMatch(QuestionCriterion.class::isInstance),
 					"a judge must declare at least one question criterion; plain code checks need no judge");
-			return new JevJudge(this.typeSafeClient, this.criteria, this.minConfidence, this.failOnInconclusive,
+			return new JevJudge(this.typeSafeClient, this.criteria, this.minConfidence, this.noulMinConfidence,
+					this.failOnInconclusive,
 					this.failOnError, this.failFast, this.feedbackRenderer);
 		}
 

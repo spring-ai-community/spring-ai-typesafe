@@ -15,7 +15,9 @@ answer", but "do not let software act on this one alone".
 
 !!! note "Nouls carry no confidence, by design"
     A noul's value already *is* its certainty. A `0.5` is the undecided case, so there is
-    nothing a separate statistic would add. Only `Choice` and `Score` report confidence.
+    nothing a separate statistic would add. Only `Choice` and `Score` report confidence. A
+    `JevJudge` can still treat a noul near 0.5 as undecided; see
+    [nouls near 0.5](../judge/JevJudge.md#nouls-near-05).
 
 ## Where confidence lives
 

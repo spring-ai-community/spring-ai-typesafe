@@ -65,10 +65,13 @@ public sealed interface JevCriterion permits JevCriterion.QuestionCriterion, Jev
 	}
 
 	/**
-	 * A score that passes when it reaches {@code minimum}.
+	 * A score that passes when at least half of its probability is on the levels at or
+	 * above {@code minimum}. The levels are whole numbers, so a fractional minimum rounds
+	 * up: 1.5 requires level 2. When the answer carries no probabilities, its value is
+	 * compared with {@code minimum} directly.
 	 * @param name the name the answer will carry
 	 * @param score the question
-	 * @param minimum the inclusive lower bound on the probability-weighted score
+	 * @param minimum the lowest passing level, between 0 and the rubric's highest level
 	 * @return the criterion
 	 */
 	static QuestionCriterion score(String name, Score score, double minimum) {

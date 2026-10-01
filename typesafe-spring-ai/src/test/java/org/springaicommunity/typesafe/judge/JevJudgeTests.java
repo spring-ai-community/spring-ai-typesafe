@@ -73,6 +73,9 @@ class JevJudgeTests {
 		.whenFalse("Gives no timing or source")
 		.build();
 
+	private static final String PLAUSIBLE_AT_055 = """
+			{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.55}},"usage":{}}""";
+
 	private static final String PLAUSIBLE_ONLY = """
 			{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.95}},"usage":{}}""";
 
@@ -800,6 +803,125 @@ class JevJudgeTests {
 				    "probabilities":{"%s":0.9},"confidence":0.9},
 				  "has_details":{"type":"noul","noul":%s}
 				},"usage":{}}""".formatted(mode, mode, details);
+	}
+
+	@Test
+	void aCoinFlipNoulStillFailsByDefault() {
+		respondWith(PLAUSIBLE_AT_055);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client()).noul("is_plausible", PLAUSIBLE, 0.7d).build().judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED]");
+	}
+
+	@Test
+	void aNoulThatDoesNotLeanClearlyIsInconclusiveWhenAskedFor() {
+		respondWith(PLAUSIBLE_AT_055);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.noulMinConfidence(0.6d)
+			.build()
+			.judge("q", "a");
+
+		// 0.55 is a coin flip, not a defect: it neither blocks nor is fed back as one.
+		assertThat(verdict.summary()).isEqualTo("passed=true [is_plausible=INCONCLUSIVE]");
+		assertThat(verdict.inconclusive()).singleElement()
+			.satisfies(finding -> assertThat(finding.detail()).isEqualTo(
+					"is_plausible: the answer did not lean clearly either way (scored 0.55, needs at least 0.60 either way to decide)"));
+	}
+
+	@Test
+	void anInconclusiveNoulFailsUnderFailOnInconclusive() {
+		respondWith(PLAUSIBLE_AT_055);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.noulMinConfidence(0.6d)
+			.failOnInconclusive(true)
+			.build()
+			.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED]");
+	}
+
+	@Test
+	void aNoulThatLeansClearlyIsStillJudgedByItsMinimum() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.35}},"usage":{}}""");
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.noulMinConfidence(0.6d)
+			.build()
+			.judge("q", "a");
+
+		// 0.35 leans no with 0.65 of support, so the verdict is decided, and failed.
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED]");
+	}
+
+	@Test
+	void aDependentOfAnInconclusiveNoulDoesNotApply() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "is_plausible":{"type":"noul","noul":0.52},
+				  "has_details":{"type":"noul","noul":0.95}
+				},"usage":{}}""");
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenPassed("is_plausible"))
+			.noulMinConfidence(0.6d)
+			.build()
+			.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=true [is_plausible=INCONCLUSIVE, has_details=NOT_APPLICABLE]");
+	}
+
+	@Test
+	void rejectsANoulMinConfidenceBelowACoinFlip() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> JevJudge.builder(this.mock.client()).noulMinConfidence(0.4d))
+			.withMessageContaining("between 0.5 and 1");
+	}
+
+	@Test
+	void quotesTheLevelAFractionalScoreMinimumActuallyRequires() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":1.2,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"0":0.10,"1":0.65,"2":0.20,"3":0.05},"confidence":0.71}
+				},"usage":{}}""");
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.score("helpfulness", HELPFULNESS, 1.5d)
+			.build()
+			.judge("q", "a");
+
+		// Levels are whole: a minimum of 1.5 is passed only on level 2 and above, and the
+		// feedback must not ask the model to reach a 1.50 that does not exist.
+		assertThat(verdict.feedback()).isEqualTo("- helpfulness: rated \"Mostly unhelpful: misses the main point\" (1.20), "
+				+ "needs to reach 2.00 which is \"Mostly helpful: minor gaps remain\"");
+	}
+
+	@Test
+	void keepsAFractionalScoreMinimumWhenTheValueDecides() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":1.2,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "confidence":0.9}
+				},"usage":{}}""");
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.score("helpfulness", HELPFULNESS, 1.5d)
+			.build()
+			.judge("q", "a");
+
+		// Without probabilities the value itself is compared, so 1.50 is the real bar.
+		assertThat(verdict.feedback()).startsWith("- helpfulness: rated \"Mostly unhelpful: misses the main point\" (1.20), "
+				+ "needs to reach 1.50");
 	}
 
 	private JevJudge searchJudge() {

@@ -11,7 +11,7 @@ counts as passing it:
 
 - a **noul** passes when its truth value reaches a minimum
 - a **score** passes when at least half of its probability is on the levels at or above
-  your minimum
+  your minimum; levels are whole numbers, so a minimum of 1.5 means level 2
 - a **choice** passes when at least half of its probability is on the labels you accept
 
 See [how a verdict is decided](#low-confidence-is-undecided-not-failed) for the details.
@@ -39,6 +39,7 @@ classDiagram
         +check(String, Predicate~JevJudgeInput~, String) Builder
         +criterion(JevCriterion) Builder
         +minConfidence(double) Builder
+        +noulMinConfidence(double) Builder
         +failOnError(boolean) Builder
         +failFast(boolean) Builder
         +failOnInconclusive(boolean) Builder
@@ -255,7 +256,8 @@ a JSON object.
 | `choice(String, Choice, String...)` | — | — | A criterion passing when at least half its probability is on the accepted labels. Validates the labels exist on the choice. |
 | `check(String, Predicate<JevJudgeInput>, String)` | — | — | A [code check](#code-criteria): passes when the predicate returns `true`, otherwise reports the defect. |
 | `criterion(JevCriterion)` | — | — | Add a pre-built criterion of either kind. |
-| `minConfidence(double)` | `double` | `0.6` | How much of a choice's or score's probability must support its verdict; below it, `INCONCLUSIVE`. See [decisive, not peaked](#low-confidence-is-undecided-not-failed). Nouls are unaffected. |
+| `minConfidence(double)` | `double` | `0.6` | How much of a choice's or score's probability must support its verdict; below it, `INCONCLUSIVE`. See [decisive, not peaked](#low-confidence-is-undecided-not-failed). |
+| `noulMinConfidence(double)` | `double` | `0.5` (off) | How far a noul must lean either way before its verdict is acted on; below it, `INCONCLUSIVE`. See [nouls near 0.5](#nouls-near-05). |
 | `failOnInconclusive(boolean)` | `boolean` | `false` | Treat an undecided criterion as a failure. |
 | `failOnError(boolean)` | `boolean` | `false` | Treat a criterion the service could not answer (`ERROR`) as a failure. |
 | `failFast(boolean)` | `boolean` | `false` | When a code check fails, skip the Jev call; the questions become `NOT_APPLICABLE`. |
@@ -442,6 +444,27 @@ because it is split between two levels, yet both levels pass a `minimum` of 2:
 
 ```
 { "0": 0.00, "1": 0.07, "2": 0.52, "3": 0.41 }   → 0.93 supports the pass → PASSED
+```
+
+### Nouls near 0.5
+
+A noul's value is its own certainty: 0.5 means Jev could not tell. By default a noul is
+still judged by its `minimum` alone, so a 0.52 against a minimum of 0.7 is `FAILED`, and its
+"defect" goes into the feedback, which a [self-refine loop](JevSelfRefineAdvisor.md) then asks
+the model to fix.
+
+`noulMinConfidence` treats a noul that doesn't lean clearly either way as undecided instead.
+Its support is the larger of its value and its complement, so at `0.6` any noul between 0.4
+and 0.6 is `INCONCLUSIVE`, whatever its `minimum`, and dependents that need it to pass don't
+apply. A noul that leans clearly is still judged by its `minimum`: at 0.35 it leans no with
+0.65 of support, and against a minimum of 0.7 it fails. The option is off by default, so
+existing verdicts don't change.
+
+```java
+JevJudge judge = JevJudge.builder(typeSafeClient)
+    .noul("is_plausible", plausibleNoul, 0.7)
+    .noulMinConfidence(0.6)
+    .build();
 ```
 
 A criterion the service returns no answer for is reported as `ERROR` rather than thrown, so a

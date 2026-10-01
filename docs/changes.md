@@ -1,5 +1,22 @@
 # Changes
 
+## 0.4.0 (unreleased)
+
+### New
+
+- **`JevJudge.Builder.noulMinConfidence(double)`:** a noul that doesn't lean clearly either
+  way (the larger of its value and its complement is below the setting) is `INCONCLUSIVE`
+  instead of failed, like a choice or score below `minConfidence`. Off by default. See
+  [Nouls near 0.5](judge/JevJudge.md#nouls-near-05).
+
+### Fixed
+
+- **Feedback for a fractional score minimum:** a score passes on the probability at or above
+  the next whole level, so a `minimum` of 1.5 requires level 2. The feedback said "needs to
+  reach 1.50"; it now quotes 2.00. Without probabilities the value itself is compared, and
+  the minimum is quoted as given. `JevCriterion.score`'s Javadoc described the minimum as a
+  bound on the probability-weighted score; it now states the rule the judge applies.
+
 ## 0.3.0
 
 Requests now go out in the same order on every run, retries and RAG screening no longer
