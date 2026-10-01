@@ -447,6 +447,48 @@ because it is split between two levels, yet both levels pass a `minimum` of 2:
 A criterion the service returns no answer for is reported as `ERROR` rather than thrown, so a
 partial response costs you that one criterion, not the whole call.
 
+## Testing with JevJudge
+
+A judge is a useful test oracle for an LLM feature. It can check meaning where
+`contains(...)` would be brittle, and it answers every criterion in one call. Asserting on
+`verdict.passed()` alone, however, fails with *Expecting value to be true but was false*,
+which hides which criterion failed. Pass the summary and the feedback as the assertion's
+description:
+
+```java
+JevVerdict verdict = judge.judge(question, answer);
+
+assertThat(verdict.passed())
+    .as("%s%n%s", verdict.summary(), verdict.feedback())
+    .isTrue();
+```
+
+A failure then names the criterion, the score it reached and the score it needed:
+
+```text
+[passed=false [helpfulness=PASSED, is_plausible=FAILED]
+- is_plausible: At least one value is impossible (scored 0.04, needs at least 0.70)]
+Expecting value to be true but was false
+```
+
+Pass the text as arguments, not as the description itself. AssertJ formats the description,
+so a `%` in a criterion's wording would break it.
+
+Three more habits make these tests trustworthy:
+
+- **Build the test's judge with `failOnInconclusive(true)` and `failOnError(true)`.** By
+  default a verdict passes when nothing *failed*, which suits a live
+  [self-refine loop](JevSelfRefineAdvisor.md). In a test it would let a criterion that Jev
+  never decided pass silently.
+- **Assert on the failing criteria when you expect a failure**, not just on `passed()`:
+  `assertThat(verdict.failures()).extracting(JevFinding::name).containsExactly("is_plausible")`.
+- **Keep these tests out of an ordinary build.** Each `judge(...)` is one billed call. This
+  repository puts them in `*IT` classes behind `-Pintegration-tests`, guarded by
+  `@EnabledIfEnvironmentVariable(named = "TYPESAFE_API_KEY", matches = ".+")`.
+
+For a criterion that sits close to its threshold, check how much it moves between runs with
+[JevConsistency](../patterns/JevConsistency.md) before you build a test on it.
+
 ## See Also
 
 - [JevSelfRefineAdvisor](JevSelfRefineAdvisor.md) — judge and retry inside a `ChatClient`
