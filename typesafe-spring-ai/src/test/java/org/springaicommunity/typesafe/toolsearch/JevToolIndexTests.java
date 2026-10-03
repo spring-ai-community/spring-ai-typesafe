@@ -112,6 +112,20 @@ class JevToolIndexTests {
 	}
 
 	@Test
+	void neverPadsMaxResultsWithToolsJevGaveNoProbability() {
+		// A clear-cut selection: every other tool at zero. With the default relevance floor
+		// of zero they must not come back as filler up to maxResults.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.jsonResponse(response(0.95d, 1.0d, 0.0d, 0.0d)));
+
+		ToolSearchResponse response = this.index.search(new ToolSearchRequest(SESSION, "weather in Paris", 5, null));
+
+		assertThat(response.toolReferences()).extracting(ToolReference::toolName).containsExactly("currentWeather");
+		assertThat(response.totalMatches()).isEqualTo(1);
+	}
+
+	@Test
 	void dropsToolsBelowTheRelevanceFloor() {
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
