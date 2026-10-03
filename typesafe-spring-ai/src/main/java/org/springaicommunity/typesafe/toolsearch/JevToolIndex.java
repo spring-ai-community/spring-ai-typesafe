@@ -163,8 +163,14 @@ public class JevToolIndex implements ToolIndex {
 		candidates.forEach(candidate -> byName.put(candidate.toolName(), candidate));
 
 		// optionsAbove returns the labels in descending probability, which is the ranking.
+		// A tool Jev gave no probability at all is never a match, even with minimumRelevance
+		// at zero: otherwise maxResults is filled up with tools Jev ruled out, in whatever
+		// order the response lists the ties.
 		ChoiceAnswer bestTool = response.choice(SELECTION_QUESTION);
-		List<String> ranked = bestTool.optionsAbove(this.minimumRelevance);
+		List<String> ranked = bestTool.optionsAbove(this.minimumRelevance)
+			.stream()
+			.filter(name -> bestTool.probabilityOf(name) > 0.0d)
+			.toList();
 		if (ranked.isEmpty() && bestTool.probabilities().isEmpty()) {
 			// probabilities defaults to empty when the response omits the field, which would
 			// otherwise discard a selection the service did make. The chosen label is the
@@ -323,7 +329,8 @@ public class JevToolIndex implements ToolIndex {
 
 		/**
 		 * Drops tools whose share of the selection distribution is below this. Left at zero,
-		 * every candidate is returned in ranked order.
+		 * every candidate Jev gives any probability is returned in ranked order; a tool with
+		 * no probability is never returned.
 		 * @param minimumRelevance the threshold, between 0 and 1
 		 * @return this builder
 		 */
