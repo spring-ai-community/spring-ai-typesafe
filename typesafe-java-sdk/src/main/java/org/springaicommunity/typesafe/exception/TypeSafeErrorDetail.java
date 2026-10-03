@@ -47,7 +47,8 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * All three are normalised onto this record: {@link #message()} always carries something
  * human-readable, {@link #errorType()} is set only by the object form, and
- * {@link #validationErrors()} is populated only by the array form.
+ * {@link #validationErrors()} is populated only by the array form. A compatible server's
+ * {@code {"error":"..."}} body, as Ollama sends it, is read like the string form.
  *
  * <p>
  * This is a best-effort reading of the body. The raw text always remains available as
@@ -101,23 +102,27 @@ public record TypeSafeErrorDetail(@Nullable String errorType, @Nullable String m
 	 * Reads the {@code detail} out of a raw error body.
 	 * @param body the raw response body, or {@code null}
 	 * @return the parsed detail, or {@code null} when the body was absent, empty, not JSON,
-	 * or carried no {@code detail} field
+	 * or carried neither a {@code detail} field nor a string {@code error} field
 	 */
 	public static @Nullable TypeSafeErrorDetail parse(@Nullable String body) {
 		if (body == null || body.isBlank()) {
 			return null;
 		}
-		JsonNode detail;
+		JsonNode root;
 		try {
-			detail = JSON_MAPPER.readTree(body).get("detail");
+			root = JSON_MAPPER.readTree(body);
 		}
 		catch (RuntimeException ex) {
 			// A body that is not JSON at all - a proxy error page, say. The caller still
 			// has the raw text.
 			return null;
 		}
+		JsonNode detail = root.get("detail");
 		if (detail == null || detail.isNull()) {
-			return null;
+			// Ollama, serving the same protocol, reports errors as {"error": "..."}.
+			JsonNode error = root.get("error");
+			return (error != null && error.isString()) ? new TypeSafeErrorDetail(null, error.stringValue(), List.of())
+					: null;
 		}
 		if (detail.isString()) {
 			return new TypeSafeErrorDetail(null, detail.stringValue(), List.of());

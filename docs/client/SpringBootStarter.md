@@ -8,7 +8,7 @@ Auto-configures a `TypeSafeClient` bean from `spring.ai.typesafe.*` properties.
 <dependency>
     <groupId>org.springaicommunity</groupId>
     <artifactId>spring-ai-starter-typesafe</artifactId>
-    <version>0.3.0-SNAPSHOT</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 

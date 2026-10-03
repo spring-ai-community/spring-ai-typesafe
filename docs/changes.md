@@ -1,5 +1,32 @@
 # Changes
 
+## 0.4.0
+
+The SDK runs against a local [Ollama](client/Ollama.md), and tool search stops padding its
+results with tools Jev ruled out. One fix changes behaviour; it is listed below with how to
+migrate.
+
+### New
+
+- **Using Ollama:** Ollama 0.35 and later serve Jev-style decision models (`nimble`, `tev1`)
+  on the same `/v1/systemone` protocol. How to point the client at it, what differs from
+  Jev, and how its answers compare. See [Using Ollama](client/Ollama.md) and the
+  [Ollama demo](demos.md#ollamasystemonedemoapplication).
+- **Testing with JevJudge:** how to use a judge as a test oracle, with assertion messages
+  that name the failing criterion. See [Testing with JevJudge](judge/JevJudge.md#testing-with-jevjudge).
+
+### Fixed
+
+- **Ollama error messages:** an error body of the form `{"error": "..."}` is read like
+  Jev's `detail`, so `errorMessage()` carries the text and `getMessage()` no longer ends in
+  raw JSON. See [Errors and Retries](client/ErrorsAndRetries.md).
+
+### Breaking changes
+
+| Change | Migrate |
+|---|---|
+| **`JevToolIndex` drops tools Jev gave no probability.** With `minimumRelevance` at its default of zero, every candidate used to come back, so a clear-cut request was padded up to `maxResults` with tools at 0.00, in whatever order the response listed them. Only tools with some probability are returned now. | Nothing to change unless you relied on getting `maxResults` tools back; a clear-cut request now returns fewer. |
+
 ## 0.3.0
 
 Requests now go out in the same order on every run, retries and RAG screening no longer
