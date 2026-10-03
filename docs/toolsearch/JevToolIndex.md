@@ -44,7 +44,8 @@ implementations behind Spring AI's tool-search advisor.
 ## What it returns
 
 Each match is a `ToolReference` whose `relevanceScore()` is that tool's share of the choice
-distribution, ordered descending and limited by the request's `maxResults`.
+distribution, ordered descending and limited by the request's `maxResults`. A tool Jev gave
+no probability is left out, so a clear-cut request can return fewer than `maxResults`.
 
 ```java
 for (ToolReference match : response.toolReferences()) {
@@ -73,7 +74,7 @@ once a person phrases it naturally. The last row is the one that needs the secon
 | Builder method | Type | Default | Description |
 |---|---|---|---|
 | `applicabilityThreshold(double)` | `double` | `0.5` | How sure the service must be that *some* tool fits before any is returned. Raise it where calling the wrong tool is worse than calling none. |
-| `minimumRelevance(double)` | `double` | `0.0` | Drop tools below this share of the distribution. At zero, every candidate is returned in ranked order. When no tool reaches it, none is returned. |
+| `minimumRelevance(double)` | `double` | `0.0` | Drop tools below this share of the distribution. At zero, every candidate Jev gives any probability is returned in ranked order; a tool at exactly zero never is. When no tool reaches it, none is returned. |
 
 ## Sessions and categories
 

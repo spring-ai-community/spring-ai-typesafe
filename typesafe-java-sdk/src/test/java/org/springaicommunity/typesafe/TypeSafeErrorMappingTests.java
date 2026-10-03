@@ -175,6 +175,20 @@ class TypeSafeErrorMappingTests {
 	}
 
 	@Test
+	void readsAnOllamaStyleErrorField() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.errorResponse(404, "{\"error\":\"model 'jev-latest' not found\"}"));
+
+		assertThatExceptionOfType(TypeSafeNotFoundException.class).isThrownBy(this::evaluate).satisfies(ex -> {
+			assertThat(ex.errorMessage()).isEqualTo("model 'jev-latest' not found");
+			assertThat(ex.errorType()).isNull();
+			assertThat(ex.validationErrors()).isEmpty();
+			assertThat(ex.getMessage()).endsWith(": model 'jev-latest' not found").doesNotContain("{\"error\"");
+		});
+	}
+
+	@Test
 	void fallsBackToTheRawBodyWhenItIsNotADetailEnvelope() {
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))

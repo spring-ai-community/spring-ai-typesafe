@@ -71,7 +71,7 @@ Measured against Ollama 0.35.0 with `nimble`:
 | Noul without instructions | rejected, 400 | Give every noul `instructions`, even when it has `whenTrue` / `whenFalse` criteria. |
 | Request id | not sent | `requestId()` is `null`. |
 | Authentication | none; any key, or none, is accepted | Keep Ollama on localhost, or put it behind something that checks. |
-| Error body | `{"error": "..."}`, no error type | The status still maps to the right exception, with the body as the message. `errorType()` is `null`. |
+| Error body | `{"error": "..."}`, no error type | The status still maps to the right exception, and `errorMessage()` reads the `error` text. `errorType()` is `null`. |
 | Validation | a `null` state is 400; more than 64 questions is 400 | Don't rely on the exact exception subtype. |
 
 Everything else, including the noul, choice and score answers, probabilities, confidence,
