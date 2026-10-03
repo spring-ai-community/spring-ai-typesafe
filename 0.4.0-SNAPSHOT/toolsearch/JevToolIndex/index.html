@@ -1999,7 +1999,8 @@ tools are indexed.</p>
 implementations behind Spring AI's tool-search advisor.</p>
 <h2 id="what-it-returns">What it returns<a class="headerlink" href="#what-it-returns" title="Permanent link">&para;</a></h2>
 <p>Each match is a <code>ToolReference</code> whose <code>relevanceScore()</code> is that tool's share of the choice
-distribution, ordered descending and limited by the request's <code>maxResults</code>.</p>
+distribution, ordered descending and limited by the request's <code>maxResults</code>. A tool Jev gave
+no probability is left out, so a clear-cut request can return fewer than <code>maxResults</code>.</p>
 <div class="highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">ToolReference</span><span class="w"> </span><span class="n">match</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">response</span><span class="p">.</span><span class="na">toolReferences</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">    </span><span class="n">System</span><span class="p">.</span><span class="na">out</span><span class="p">.</span><span class="na">printf</span><span class="p">(</span><span class="s">"%-16s %.2f  %s%n"</span><span class="p">,</span><span class="w"> </span><span class="n">match</span><span class="p">.</span><span class="na">toolName</span><span class="p">(),</span><span class="w"> </span><span class="n">match</span><span class="p">.</span><span class="na">relevanceScore</span><span class="p">(),</span><span class="w"> </span><span class="n">match</span><span class="p">.</span><span class="na">summary</span><span class="p">());</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="p">}</span>
@@ -2066,7 +2067,7 @@ once a person phrases it naturally. The last row is the one that needs the secon
 <td><code>minimumRelevance(double)</code></td>
 <td><code>double</code></td>
 <td><code>0.0</code></td>
-<td>Drop tools below this share of the distribution. At zero, every candidate is returned in ranked order. When no tool reaches it, none is returned.</td>
+<td>Drop tools below this share of the distribution. At zero, every candidate Jev gives any probability is returned in ranked order; a tool at exactly zero never is. When no tool reaches it, none is returned.</td>
 </tr>
 </tbody>
 </table>

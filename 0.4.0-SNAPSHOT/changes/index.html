@@ -1680,15 +1680,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#030" class="md-nav__link">
+  <a href="#040" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.3.0
+        0.4.0
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.3.0">
+    <nav class="md-nav" aria-label="0.4.0">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1730,15 +1730,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#020" class="md-nav__link">
+  <a href="#030" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.2.0
+        0.3.0
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.2.0">
+    <nav class="md-nav" aria-label="0.3.0">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1753,7 +1753,57 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#breaking-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.2.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaking changes
@@ -1803,15 +1853,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#030" class="md-nav__link">
+  <a href="#040" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.3.0
+        0.4.0
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.3.0">
+    <nav class="md-nav" aria-label="0.4.0">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1853,15 +1903,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#020" class="md-nav__link">
+  <a href="#030" class="md-nav__link">
     <span class="md-ellipsis">
       
-        0.2.0
+        0.3.0
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="0.2.0">
+    <nav class="md-nav" aria-label="0.3.0">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1876,7 +1926,57 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#fixed_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#breaking-changes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breaking changes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#020" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0.2.0
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="0.2.0">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#new_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#breaking-changes_2" class="md-nav__link">
     <span class="md-ellipsis">
       
         Breaking changes
@@ -1920,11 +2020,45 @@
 
 
 <h1 id="changes">Changes<a class="headerlink" href="#changes" title="Permanent link">&para;</a></h1>
+<h2 id="040">0.4.0<a class="headerlink" href="#040" title="Permanent link">&para;</a></h2>
+<p>The SDK runs against a local <a href="../client/Ollama/">Ollama</a>, and tool search stops padding its
+results with tools Jev ruled out. One fix changes behaviour; it is listed below with how to
+migrate.</p>
+<h3 id="new">New<a class="headerlink" href="#new" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Using Ollama:</strong> Ollama 0.35 and later serve Jev-style decision models (<code>nimble</code>, <code>tev1</code>)
+  on the same <code>/v1/systemone</code> protocol. How to point the client at it, what differs from
+  Jev, and how its answers compare. See <a href="../client/Ollama/">Using Ollama</a> and the
+  <a href="../demos/#ollamasystemonedemoapplication">Ollama demo</a>.</li>
+<li><strong>Testing with JevJudge:</strong> how to use a judge as a test oracle, with assertion messages
+  that name the failing criterion. See <a href="../judge/JevJudge/#testing-with-jevjudge">Testing with JevJudge</a>.</li>
+</ul>
+<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Ollama error messages:</strong> an error body of the form <code>{"error": "..."}</code> is read like
+  Jev's <code>detail</code>, so <code>errorMessage()</code> carries the text and <code>getMessage()</code> no longer ends in
+  raw JSON. See <a href="../client/ErrorsAndRetries/">Errors and Retries</a>.</li>
+</ul>
+<h3 id="breaking-changes">Breaking changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Change</th>
+<th>Migrate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><code>JevToolIndex</code> drops tools Jev gave no probability.</strong> With <code>minimumRelevance</code> at its default of zero, every candidate used to come back, so a clear-cut request was padded up to <code>maxResults</code> with tools at 0.00, in whatever order the response listed them. Only tools with some probability are returned now.</td>
+<td>Nothing to change unless you relied on getting <code>maxResults</code> tools back; a clear-cut request now returns fewer.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="030">0.3.0<a class="headerlink" href="#030" title="Permanent link">&para;</a></h2>
 <p>Requests now go out in the same order on every run, retries and RAG screening no longer
 fail silently, and the SDK runs against a local <a href="../client/Laya/">Laya</a> server. A few fixes
 change behaviour; each is listed below with how to migrate.</p>
-<h3 id="new">New<a class="headerlink" href="#new" title="Permanent link">&para;</a></h3>
+<h3 id="new_1">New<a class="headerlink" href="#new_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong><code>JsonContent.object(key, value, …)</code>:</strong> a JSON object whose keys keep the order they are
   written in, for state, structured instructions and criteria descriptions. Use it in place
@@ -1933,7 +2067,7 @@ change behaviour; each is listed below with how to migrate.</p>
   what differs from Jev. The live ITs follow <code>TYPESAFE_BASE_URL</code>, so they can run against
   one too. See <a href="../client/Laya/">Using Laya</a>.</li>
 </ul>
-<h3 id="fixed">Fixed<a class="headerlink" href="#fixed" title="Permanent link">&para;</a></h3>
+<h3 id="fixed_1">Fixed<a class="headerlink" href="#fixed_1" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>Retries silently disabled:</strong> <code>TypeSafeClient.Builder</code> counted its 10 s default timeout
   against the retry budget even for a transport you supplied, so a budget of 10 s or less
@@ -1943,7 +2077,7 @@ change behaviour; each is listed below with how to migrate.</p>
   passages could not be screened and were passed through. <code>JevDocumentReranker</code> keeps a
   document unscored, instead of failing the request, when a response lacks the answer.</li>
 </ul>
-<h3 id="breaking-changes">Breaking changes<a class="headerlink" href="#breaking-changes" title="Permanent link">&para;</a></h3>
+<h3 id="breaking-changes_1">Breaking changes<a class="headerlink" href="#breaking-changes_1" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -1982,7 +2116,7 @@ change behaviour; each is listed below with how to migrate.</p>
 <p>A stronger <a href="../judge/JevJudge/">Model-as-a-judge</a> API, a sturdier self-refine advisor, and an
 experimental <a href="../chat/JevChatModel/"><code>JevChatModel</code></a>. Most upgrades need a recompile and at
 most a type rename; each breaking change below says how to migrate.</p>
-<h3 id="new_1">New<a class="headerlink" href="#new_1" title="Permanent link">&para;</a></h3>
+<h3 id="new_2">New<a class="headerlink" href="#new_2" title="Permanent link">&para;</a></h3>
 <p><strong>Judge</strong></p>
 <ul>
 <li><strong>Code criteria:</strong> <code>JevJudge.Builder.check(name, predicate, defect)</code>. A plain-Java check
@@ -2017,7 +2151,7 @@ most a type rename; each breaking change below says how to migrate.</p>
 <li><strong>Criteria-only nouls:</strong> <code>Noul.builder()</code> accepts a noul with criteria (<code>whenTrue</code> /
   <code>whenFalse</code>) and no instructions, as the API does. It still rejects a noul with neither.</li>
 </ul>
-<h3 id="breaking-changes_1">Breaking changes<a class="headerlink" href="#breaking-changes_1" title="Permanent link">&para;</a></h3>
+<h3 id="breaking-changes_2">Breaking changes<a class="headerlink" href="#breaking-changes_2" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
