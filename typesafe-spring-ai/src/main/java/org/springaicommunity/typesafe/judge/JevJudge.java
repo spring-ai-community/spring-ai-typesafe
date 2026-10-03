@@ -27,6 +27,8 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.TypeSafeClient;
 import org.springaicommunity.typesafe.judge.JevCriterion.CodeCriterion;
@@ -79,6 +81,11 @@ import org.springframework.util.Assert;
  * JevVerdict verdict = judge.judge(question, answer);
  * }</pre>
  *
+ * <p>
+ * Built with {@link Builder#escalateTo(JevEscalation, double) escalateTo}, the judge becomes the
+ * first stage of a cascade: it keeps Jev's verdict wherever Jev was confident and hands
+ * the criteria it was unsure about to a stronger judge.
+ *
  * @author Christian Tzolov
  */
 public class JevJudge {
@@ -89,6 +96,8 @@ public class JevJudge {
 	 * pass and fail supports it at 50%.
 	 */
 	public static final double DEFAULT_MIN_CONFIDENCE = 0.6d;
+
+	private static final Logger logger = LoggerFactory.getLogger(JevJudge.class);
 
 	/**
 	 * The state field carrying what was asked; see {@link JevJudgeInput#QUESTION_FIELD}.
@@ -115,12 +124,17 @@ public class JevJudge {
 
 	private final Function<List<JevFinding>, String> feedbackRenderer;
 
+	private final @Nullable JevEscalation escalation;
+
+	private final double escalationThreshold;
+
 	/** Whether any criterion reads the input, so a raw state must be wrapped for it. */
 	private final boolean needsInput;
 
 	private JevJudge(TypeSafeClient typeSafeClient, List<JevCriterion> criteria, double minConfidence,
 			boolean failOnInconclusive, boolean failOnError, boolean failFast,
-			Function<List<JevFinding>, String> feedbackRenderer) {
+			Function<List<JevFinding>, String> feedbackRenderer, @Nullable JevEscalation escalation,
+			double escalationThreshold) {
 		this.typeSafeClient = typeSafeClient;
 		this.criteria = List.copyOf(criteria);
 		this.minConfidence = minConfidence;
@@ -128,6 +142,8 @@ public class JevJudge {
 		this.failOnError = failOnError;
 		this.failFast = failFast;
 		this.feedbackRenderer = feedbackRenderer;
+		this.escalation = escalation;
+		this.escalationThreshold = escalationThreshold;
 		this.needsInput = this.criteria.stream()
 			.anyMatch(criterion -> criterion instanceof CodeCriterion
 					|| (criterion instanceof QuestionCriterion question && question.appliesWhen() != null));
@@ -220,6 +236,12 @@ public class JevJudge {
 					finding = notApplicable(question, "does not apply, " + unmet);
 				}
 			}
+			// After its own dependency, so a criterion set aside is never paid for; before
+			// its dependents, so they follow the escalated decision. Code checks and
+			// criteria set aside carry no answer, and are never escalated.
+			if (criterion instanceof QuestionCriterion question && finding.answer() != null) {
+				finding = escalateIfUnsure(question, finding, state, undecided);
+			}
 			byName.put(criterion.name(), finding);
 		}
 		List<JevFinding> findings = List.copyOf(byName.values());
@@ -228,6 +250,92 @@ public class JevJudge {
 		String feedback = passed ? "" : this.feedbackRenderer.apply(findings);
 
 		return new JevVerdict(passed, findings, response, feedback);
+	}
+
+	/**
+	 * Hands a criterion Jev answered without enough support to the escalation, and
+	 * judges the escalation's answer by the criterion's own pass rule instead.
+	 */
+	private JevFinding escalateIfUnsure(QuestionCriterion criterion, JevFinding finding, JsonContent state,
+			Set<String> undecided) {
+		if (this.escalation == null || !isUnsure(criterion, finding, undecided)) {
+			return finding;
+		}
+		JevEscalation.Decision decision;
+		try {
+			decision = this.escalation.decide(criterion.name(), criterion.question(), state);
+			Assert.state(decision != null, "the escalation returned no decision");
+			Assert.state(answers(criterion.question(), decision.answer()), () -> "the escalation answered a "
+					+ criterion.question().typeName() + " with " + decision.answer().getClass().getSimpleName());
+		}
+		catch (RuntimeException ex) {
+			// The fallback being down says nothing about the answer: keep Jev's finding,
+			// marked, so a cascade that never works does not pass for one that does.
+			logger.warn("Escalating criterion '{}' failed, keeping Jev's finding: {}", criterion.name(), ex.toString());
+			return new JevFinding(criterion, finding.answer(), finding.outcome(), finding.detail(),
+					JevFinding.Escalation.FAILED);
+		}
+		// evaluate re-adds the criterion if the escalation's answer is undecided too.
+		undecided.remove(criterion.name());
+		JevFinding decided = evaluate(criterion, decision.answer(), undecided);
+		String detail = decided.outcome() == JevFinding.Outcome.FAILED ? escalatedDefect(criterion, decided)
+				: decided.detail();
+		if (!detail.isEmpty() && decision.reason() != null && !decision.reason().isBlank()) {
+			detail = format("%s; the escalation judge: %s", detail, decision.reason().strip());
+		}
+		return new JevFinding(criterion, decided.answer(), decided.outcome(), detail, JevFinding.Escalation.DECIDED);
+	}
+
+	/**
+	 * The defect of a criterion the escalation failed. A noul's truth value and a choice's
+	 * probability are only how the escalation's label was encoded, so quoting them ("scored
+	 * 0.00") would mislead; a score's level is the label itself and stays.
+	 */
+	private String escalatedDefect(QuestionCriterion criterion, JevFinding decided) {
+		if (decided.answer() instanceof NoulAnswer) {
+			return format("%s: %s", criterion.name(), describeFalseSide(criterion));
+		}
+		if (decided.answer() instanceof ChoiceAnswer choice) {
+			return format("%s: chose \"%s\", which is not one of %s", criterion.name(), choice.value(),
+					criterion.acceptedOptions());
+		}
+		return decided.detail();
+	}
+
+	/**
+	 * Whether Jev's finding is too weak to keep: it errored or was inconclusive, or less
+	 * of its probability than the escalation threshold supports the verdict. A noul has
+	 * no confidence statistic of its own, so its support is the larger of its truth value
+	 * and its complement: how sure Jev is of the label, not how far the value is from the
+	 * criterion's {@code minimum}.
+	 */
+	private boolean isUnsure(QuestionCriterion criterion, JevFinding finding, Set<String> undecided) {
+		if (undecided.contains(criterion.name())) {
+			return true;
+		}
+		return support(criterion, finding.answer()) < this.escalationThreshold;
+	}
+
+	/**
+	 * @return how much of the answer's probability supports its verdict
+	 */
+	private static double support(QuestionCriterion criterion, @Nullable Answer answer) {
+		if (answer instanceof NoulAnswer noul) {
+			return Math.max(noul.value(), 1.0d - noul.value());
+		}
+		if (answer instanceof ScoreAnswer score) {
+			return scoreSupport(criterion, score, scorePasses(criterion, score));
+		}
+		if (answer instanceof ChoiceAnswer choice) {
+			return choiceSupport(criterion, choice, choicePasses(criterion, choice));
+		}
+		return 0.0d;
+	}
+
+	private static boolean answers(Question question, Answer answer) {
+		return (question instanceof Noul && answer instanceof NoulAnswer)
+				|| (question instanceof Choice && answer instanceof ChoiceAnswer)
+				|| (question instanceof Score && answer instanceof ScoreAnswer);
 	}
 
 	/**
@@ -579,6 +687,10 @@ public class JevJudge {
 
 		private Function<List<JevFinding>, String> feedbackRenderer = JevJudge::defaultFeedback;
 
+		private @Nullable JevEscalation escalation;
+
+		private double escalationThreshold;
+
 		private Builder(TypeSafeClient typeSafeClient) {
 			Assert.notNull(typeSafeClient, "typeSafeClient must not be null");
 			this.typeSafeClient = typeSafeClient;
@@ -735,6 +847,34 @@ public class JevJudge {
 			return this;
 		}
 
+		/**
+		 * Escalates the criteria Jev is unsure about to a stronger judge: accept when
+		 * confident, escalate when unsure. A question criterion is escalated when Jev's
+		 * answer errored or was inconclusive, or when less than {@code threshold} of its
+		 * probability supports its verdict — for a noul, when neither its truth value nor
+		 * its complement reaches it. The escalation's answer then decides the criterion,
+		 * judged by the same {@code minimum} or accepted options, and dependents follow
+		 * it. Code checks and criteria that did not apply are never escalated.
+		 *
+		 * <p>
+		 * There is deliberately no default threshold. It trades cost for accuracy, and the
+		 * same value escalates very different shares of criteria on different workloads —
+		 * in Li et al. (2026) 0.9 escalated a quarter of one benchmark and two thirds of
+		 * another, and lowered accuracy on the second. Choose it on about a hundred
+		 * labelled examples of your own.
+		 * @param escalation the stronger judge
+		 * @param threshold the support at or above which Jev's verdict is kept, between
+		 * {@code 0} and {@code 1}
+		 * @return this builder
+		 */
+		public Builder escalateTo(JevEscalation escalation, double threshold) {
+			Assert.notNull(escalation, "escalation must not be null");
+			Assert.isTrue(threshold >= 0.0d && threshold <= 1.0d, "threshold must be between 0 and 1");
+			this.escalation = escalation;
+			this.escalationThreshold = threshold;
+			return this;
+		}
+
 		public JevJudge build() {
 			Assert.notEmpty(this.criteria, "a judge must declare at least one criterion");
 			// A judge of checks alone never needs Jev; it is a predicate, and would leave
@@ -742,7 +882,7 @@ public class JevJudge {
 			Assert.isTrue(this.criteria.stream().anyMatch(QuestionCriterion.class::isInstance),
 					"a judge must declare at least one question criterion; plain code checks need no judge");
 			return new JevJudge(this.typeSafeClient, this.criteria, this.minConfidence, this.failOnInconclusive,
-					this.failOnError, this.failFast, this.feedbackRenderer);
+					this.failOnError, this.failFast, this.feedbackRenderer, this.escalation, this.escalationThreshold);
 		}
 
 	}

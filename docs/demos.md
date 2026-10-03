@@ -1,6 +1,6 @@
 # Demos
 
-Eight runnable entry points in `examples`. Run `mvn install -DskipTests` from the reactor root
+Nine runnable entry points in `examples`. Run `mvn install -DskipTests` from the reactor root
 first, so the other modules are resolvable; `spring-boot:run` is a single-module goal, so it
 takes `-pl examples` **without** `-am`.
 
@@ -13,14 +13,16 @@ takes `-pl examples` **without** `-am`.
 | [CascadeDemo](#cascadedemo) | Jev as the gate in a cheap-model-first cascade | `TYPESAFE_API_KEY` |
 | [GuardrailDemo](#guardraildemo) | screening a turn in both directions | `TYPESAFE_API_KEY` |
 | [ModelJudgeDemoApplication](#modeljudgedemoapplication) | the self-refine judge loop | both keys |
+| [EscalatingJudgeDemoApplication](#escalatingjudgedemoapplication) | accept when confident, escalate when unsure | both keys |
 | [OllamaSystemOneDemoApplication](#ollamasystemonedemoapplication) | the same client against a local Ollama | no key, Ollama 0.35+ |
 
-Only `ModelJudgeDemoApplication` needs `ANTHROPIC_API_KEY`, and the Ollama demo needs no key at all.
+Only `ModelJudgeDemoApplication` and `EscalatingJudgeDemoApplication` need `ANTHROPIC_API_KEY`, and the Ollama demo needs no key at all.
 
 !!! tip "Running the demos against Laya"
     The plain demos build their client with `TypeSafeClient.builder()`, so they follow
-    `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY`. The Spring Boot demo reads
-    `SPRING_AI_TYPESAFE_BASE_URL` and `SPRING_AI_TYPESAFE_API_KEY`. Pointed at a local
+    `TYPESAFE_BASE_URL` and `TYPESAFE_API_KEY`. `ModelJudgeDemoApplication` and
+    `EscalatingJudgeDemoApplication` read `SPRING_AI_TYPESAFE_BASE_URL` and
+    `SPRING_AI_TYPESAFE_API_KEY`. Pointed at a local
     [Laya](client/Laya.md) server, they run, but the answers differ from Jev's; see
     [how it compares](client/Laya.md#how-it-compares). `JevQuickstart` stops at
     `listModels()`, since Laya has no `/v1/models`, and the Model-as-a-judge demo is not a
@@ -218,6 +220,42 @@ tool said — a judge model asked for one overall rating usually passes it. `is_
 a question with one job, so it does not.
 
 See [JevSelfRefineAdvisor](judge/JevSelfRefineAdvisor.md).
+
+## EscalatingJudgeDemoApplication
+
+Jev judges four answers to arithmetic questions on three criteria, and the criteria it is
+unsure about are escalated to Claude. The same answers are judged by Jev alone alongside, so
+each line shows what escalating changed:
+
+```bash
+export TYPESAFE_API_KEY=... ANTHROPIC_API_KEY=...
+mvn -pl examples spring-boot:run \
+    -Dspring-boot.run.main-class=org.springaicommunity.typesafe.demo.escalation.EscalatingJudgeDemoApplication
+```
+
+```
+Q: A shop sells pens at 3 for 2.40. How much do 7 pens cost?
+A: Each pen is 0.80, so 7 pens cost 5.60.
+  is_correct   jev PASSED   0.94   cascade PASSED   kept
+  is_grounded  jev PASSED   0.95   cascade PASSED   kept
+  helpfulness  jev PASSED   2.78   cascade PASSED   kept
+────────────────────────────────────────────────────────────────────────────────────
+Q: A shop sells pens at 3 for 2.40. How much do 7 pens cost?
+A: Three pens cost 2.40, so six pens cost 4.80. One more pen at the single price of 0.80 makes 5…
+  is_correct   jev FAILED   0.32   cascade FAILED   escalated: Each pen costs 2.40/3 = 0.80, so 7 pens cost 7 ×…
+  is_grounded  jev FAILED   0.19   cascade FAILED   escalated: The assistant introduces a claim that shops 'usu…
+  helpfulness  jev PASSED   1.96   cascade FAILED   escalated: The assistant correctly computes the unit price …
+...
+12 criteria: 5 escalated to the chat model, 3 verdicts changed.
+```
+
+Jev is sure of the terse right answer and of the plainly wrong parts, and those verdicts
+are kept at no extra cost. What it escalates is the fluent working that ends wrong, and
+there the chat model overturns Jev's `helpfulness` pass. Correctness is asked without a
+reference answer on purpose: that is where Jev has to check the working itself, and where
+it is least sure.
+
+See [Escalating uncertain criteria](judge/JevJudge.md#escalating-uncertain-criteria).
 
 ## OllamaSystemOneDemoApplication
 

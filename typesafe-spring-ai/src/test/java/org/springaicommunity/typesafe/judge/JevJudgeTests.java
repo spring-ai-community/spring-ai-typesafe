@@ -19,6 +19,8 @@ package org.springaicommunity.typesafe.judge;
 
 
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -27,8 +29,11 @@ import org.springaicommunity.typesafe.MockTypeSafeServer;
 import org.springaicommunity.typesafe.judge.JevCriterion.QuestionCriterion;
 import org.springaicommunity.typesafe.question.Choice;
 import org.springaicommunity.typesafe.question.Noul;
+import org.springaicommunity.typesafe.question.Question;
 import org.springaicommunity.typesafe.question.Score;
+import org.springaicommunity.typesafe.response.Answer;
 import org.springaicommunity.typesafe.response.ChoiceAnswer;
+import org.springaicommunity.typesafe.response.NoulAnswer;
 import org.springaicommunity.typesafe.response.ScoreAnswer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -791,6 +796,266 @@ class JevJudgeTests {
 			.choice("mode", MODE, "answered", "clarification_needed")
 			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
 			.build();
+	}
+
+	@Test
+	void keepsJevsVerdictWhenItIsConfidentEnough() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.97}},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(new NoulAnswer(0.0d), "never asked");
+
+		JevVerdict verdict = escalatingJudge(escalation).judge("q", "a");
+
+		assertThat(escalation.asked).isEmpty();
+		assertThat(verdict.summary()).isEqualTo("passed=true [is_plausible=PASSED]");
+		assertThat(verdict.escalated()).isEmpty();
+	}
+
+	@Test
+	void escalatesANoulNeitherSideOfWhichIsConfident() {
+		// 0.55 fails the 0.7 minimum, but only 0.55 of the probability supports anything.
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.55}},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(new NoulAnswer(0.0d), "-255 C is below absolute zero.");
+
+		JevVerdict verdict = escalatingJudge(escalation).judge("Weather in Paris?", "It is -255 degrees Celsius.");
+
+		assertThat(escalation.asked).containsExactly("is_plausible");
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED(escalated)]");
+		assertThat(verdict.escalated()).singleElement().satisfies(finding -> {
+			assertThat(finding.escalated()).isTrue();
+			assertThat(finding.answer()).isEqualTo(new NoulAnswer(0.0d));
+		});
+		// The escalation's label, not an encoded 0.00, is what the feedback reports.
+		assertThat(verdict.feedback()).isEqualTo(
+				"- is_plausible: Contains an impossible or absurd value; the escalation judge: -255 C is below absolute zero.");
+	}
+
+	@Test
+	void escalatedAnswersAreJudgedByTheCriterionsOwnRule() {
+		// A score Jev split 0.5/0.5 either side of the minimum; the escalation picks level 2.
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":1.5,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"1":0.5,"2":0.5},"confidence":0.5}
+				},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(
+				new ScoreAnswer(2.0d, Map.of(), Map.of(2, 1.0d), 1.0d), "Answers the question.");
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.score("helpfulness", HELPFULNESS, 2.0d)
+			.escalateTo(escalation, 0.9d)
+			.build()
+			.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=true [helpfulness=PASSED(escalated)]");
+		assertThat(verdict.inconclusive()).isEmpty();
+		assertThat(verdict.feedback()).isEmpty();
+	}
+
+	@Test
+	void escalatesAChoiceBelowTheThresholdAndItsDependentFollows() {
+		// Decisive enough for minConfidence (0.7), not for the 0.9 escalation threshold.
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "mode":{"type":"choice","choice":"answered",
+				    "probabilities":{"answered":0.7,"clarification_needed":0.3},"confidence":0.4},
+				  "has_details":{"type":"noul","noul":0.02}
+				},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(
+				new ChoiceAnswer("clarification_needed", Map.of("clarification_needed", 1.0d), 1.0d), null);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.choice("mode", MODE, "answered")
+			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
+			.escalateTo(escalation, 0.9d)
+			.build()
+			.judge("q", "a");
+
+		// The escalated choice did not select "answered", so its dependent does not apply
+		// and is never escalated itself.
+		assertThat(escalation.asked).containsExactly("mode");
+		assertThat(verdict.summary()).isEqualTo("passed=false [mode=FAILED(escalated), has_details=NOT_APPLICABLE]");
+		assertThat(verdict.feedback())
+			.isEqualTo("- mode: chose \"clarification_needed\", which is not one of [answered]");
+	}
+
+	@Test
+	void escalatesAnInconclusiveCriterionWhateverTheThreshold() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":1.5,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"0":0.25,"1":0.25,"2":0.25,"3":0.25},"confidence":0.20}
+				},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(
+				new ScoreAnswer(0.0d, Map.of(), Map.of(0, 1.0d), 1.0d), "Off topic.");
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.score("helpfulness", HELPFULNESS, 2.0d)
+			.escalateTo(escalation, 0.0d)
+			.build()
+			.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [helpfulness=FAILED(escalated)]");
+	}
+
+	@Test
+	void escalatesAMissingAnswer() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":3.0,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"3":1.0},"confidence":1.0}
+				},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(new NoulAnswer(1.0d), null);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.score("helpfulness", HELPFULNESS, 2.0d)
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.escalateTo(escalation, 0.9d)
+			.build()
+			.judge("q", "a");
+
+		assertThat(escalation.asked).containsExactly("is_plausible");
+		assertThat(verdict.summary()).isEqualTo("passed=true [helpfulness=PASSED, is_plausible=PASSED(escalated)]");
+		assertThat(verdict.errors()).isEmpty();
+	}
+
+	@Test
+	void neverEscalatesACodeCheck() {
+		respondWith(PLAUSIBLE_ONLY);
+		RecordingEscalation escalation = new RecordingEscalation(new NoulAnswer(1.0d), null);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.check("searched", input -> false, "no search was made")
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.escalateTo(escalation, 0.9d)
+			.build()
+			.judge("q", "a");
+
+		assertThat(escalation.asked).isEmpty();
+		assertThat(verdict.summary()).isEqualTo("passed=false [searched=FAILED, is_plausible=PASSED]");
+	}
+
+	@Test
+	void keepsJevsFindingWhenTheEscalationFails() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.55}},"usage":{}}""");
+
+		JevVerdict verdict = escalatingJudge((name, question, state) -> {
+			throw new IllegalStateException("fallback down");
+		}).judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED(escalation failed)]");
+		assertThat(verdict.escalated()).isEmpty();
+		assertThat(verdict.findings().get(0).escalation()).isEqualTo(JevFinding.Escalation.FAILED);
+	}
+
+	@Test
+	void keepsJevsFindingWhenTheEscalationAnswersTheWrongKind() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.55}},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(
+				new ChoiceAnswer("yes", Map.of("yes", 1.0d), 1.0d), null);
+
+		JevVerdict verdict = escalatingJudge(escalation).judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED(escalation failed)]");
+	}
+
+	@Test
+	void escalatesAPassingNoulJustAboveItsMinimumAndCanFailIt() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{"is_plausible":{"type":"noul","noul":0.75}},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(new NoulAnswer(0.0d), "Impossible value.");
+
+		JevVerdict verdict = escalatingJudge(escalation).judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=false [is_plausible=FAILED(escalated)]");
+	}
+
+	@Test
+	void escalationDecidesWhatFailOnInconclusiveWouldHaveFailed() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "helpfulness":{"type":"score","score":1.5,
+				    "legend":{"0":"Terrible","1":"Mostly unhelpful","2":"Mostly helpful","3":"Excellent"},
+				    "probabilities":{"0":0.25,"1":0.25,"2":0.25,"3":0.25},"confidence":0.20}
+				},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(
+				new ScoreAnswer(3.0d, Map.of(), Map.of(3, 1.0d), 1.0d), null);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.score("helpfulness", HELPFULNESS, 2.0d)
+			.failOnInconclusive(true)
+			.escalateTo(escalation, 0.9d)
+			.build()
+			.judge("q", "a");
+
+		assertThat(verdict.summary()).isEqualTo("passed=true [helpfulness=PASSED(escalated)]");
+	}
+
+	@Test
+	void staysUndecidedWhenTheEscalationIsUnsureToo() {
+		respondWith("""
+				{"model":"jev-1.13.0","answers":{
+				  "mode":{"type":"choice","choice":"answered",
+				    "probabilities":{"answered":0.5,"clarification_needed":0.5},"confidence":0.1},
+				  "has_details":{"type":"noul","noul":0.99}
+				},"usage":{}}""");
+		RecordingEscalation escalation = new RecordingEscalation(new ChoiceAnswer("answered",
+				Map.of("answered", 0.55d, "clarification_needed", 0.45d), 0.1d), null);
+
+		JevVerdict verdict = JevJudge.builder(this.mock.client())
+			.choice("mode", MODE, "answered")
+			.criterion(JevCriterion.noul("has_details", DETAILS, 0.7d).whenChosen("mode", "answered"))
+			.escalateTo(escalation, 0.9d)
+			.build()
+			.judge("q", "a");
+
+		// Still inconclusive after escalating, so the dependent has nothing to follow.
+		assertThat(verdict.summary())
+			.isEqualTo("passed=true [mode=INCONCLUSIVE(escalated), has_details=NOT_APPLICABLE]");
+	}
+
+	@Test
+	void rejectsAnEscalationThresholdOutOfRange() {
+		assertThatIllegalArgumentException()
+			.isThrownBy(() -> JevJudge.builder(this.mock.client()).escalateTo((n, q, s) -> null, 1.5d))
+			.withMessageContaining("between 0 and 1");
+	}
+
+	private JevJudge escalatingJudge(JevEscalation escalation) {
+		return JevJudge.builder(this.mock.client())
+			.noul("is_plausible", PLAUSIBLE, 0.7d)
+			.escalateTo(escalation, 0.9d)
+			.build();
+	}
+
+	/**
+	 * Answers every escalated question the same way and records which were asked.
+	 */
+	private static final class RecordingEscalation implements JevEscalation {
+
+		private final List<String> asked = new ArrayList<>();
+
+		private final Answer answer;
+
+		private final String reason;
+
+		RecordingEscalation(Answer answer, String reason) {
+			this.answer = answer;
+			this.reason = reason;
+		}
+
+		@Override
+		public Decision decide(String name, Question question, JsonContent state) {
+			this.asked.add(name);
+			return new Decision(this.answer, this.reason);
+		}
+
 	}
 
 	private static String modeAnd(String mode, double details) {

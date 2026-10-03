@@ -51,7 +51,7 @@ spring-ai-typesafe/
 ├── typesafe-spring-ai/           # Judge, advisors, RAG post-processors, tool index
 ├── spring-ai-starter-typesafe/   # spring.ai.typesafe.* properties and a TypeSafeClient bean
 ├── typesafe-bom/                 # Bill of materials for the three above
-└── examples/                     # Eight runnable demos
+└── examples/                     # Nine runnable demos
 ```
 
 `typesafe-spring-ai` holds five packages:
