@@ -154,7 +154,7 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 		ChatClientResponse response = callAdvisorChain.nextCall(chatClientRequest);
 
 		if (this.outputBattery != null) {
-			String answer = answerOf(response);
+			String answer = AssistantAnswers.textOf(response);
 			if (!answer.isBlank()) {
 				JevGuardrail.Verdict verdict = this.outputBattery.screen(this.typeSafeClient, answer);
 				if (shouldBlock(verdict)) {
@@ -190,14 +190,6 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 		Map<String, Object> context = new HashMap<>(request.context());
 		context.put(OUTCOME_CONTEXT_KEY, verdict.outcome().name());
 		return ChatClientResponse.builder().chatResponse(chatResponse).context(context).build();
-	}
-
-	private static String answerOf(ChatClientResponse response) {
-		if (response.chatResponse() == null || response.chatResponse().getResult() == null) {
-			return "";
-		}
-		String text = response.chatResponse().getResult().getOutput().getText();
-		return text == null ? "" : text;
 	}
 
 	/**

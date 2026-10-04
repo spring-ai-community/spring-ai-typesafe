@@ -1,5 +1,14 @@
 # Changes
 
+## 0.5.0 (unreleased)
+
+### Fixed
+
+- **Advisors with extended thinking:** Spring AI's Anthropic model returns each thinking
+  block as its own generation, ahead of the answer. `JevSelfRefineAdvisor` judged that
+  block, an empty text, instead of the answer, and `JevGuardrailAdvisor` skipped output
+  screening. Both now read the answer.
+
 ## 0.4.0
 
 The SDK runs against a local [Ollama](client/Ollama.md), and tool search stops padding its

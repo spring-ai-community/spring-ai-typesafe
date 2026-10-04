@@ -22,6 +22,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ChatModel;
@@ -47,6 +48,8 @@ public class ScriptedChatModel implements ChatModel {
 
 	private static final String TOOL_CALL_PREFIX = "\u0000tool-call:";
 
+	private static final String THINKING_PREFIX = "\u0000thinking:";
+
 	public ScriptedChatModel(String... answers) {
 		this.answers.addAll(List.of(answers));
 	}
@@ -59,6 +62,17 @@ public class ScriptedChatModel implements ChatModel {
 	 */
 	public static String toolCall(String toolName, String arguments) {
 		return TOOL_CALL_PREFIX + toolName + "\u0000" + arguments;
+	}
+
+	/**
+	 * A scripted step that answers after a thinking block, shaped as Anthropic returns it
+	 * in Spring AI 2.0: the thinking as a generation of its own, ahead of the answer.
+	 * @param thinking the thinking text, empty when the thinking is not displayed
+	 * @param answer the answer
+	 * @return the step, to pass among the constructor's answers
+	 */
+	public static String afterThinking(String thinking, String answer) {
+		return THINKING_PREFIX + thinking + "\u0000" + answer;
 	}
 
 	/**
@@ -81,6 +95,15 @@ public class ScriptedChatModel implements ChatModel {
 						parts[0], parts[1])))
 				.build();
 			return new ChatResponse(List.of(new Generation(toolCall)));
+		}
+		if (answer.startsWith(THINKING_PREFIX)) {
+			String[] parts = answer.substring(THINKING_PREFIX.length()).split("\u0000", 2);
+			AssistantMessage thinking = AssistantMessage.builder()
+				.content(parts[0])
+				.properties(Map.of("signature", "sig"))
+				.build();
+			return new ChatResponse(
+					List.of(new Generation(thinking), new Generation(new AssistantMessage(parts[1]))));
 		}
 		return new ChatResponse(List.of(new Generation(new AssistantMessage(answer))));
 	}
