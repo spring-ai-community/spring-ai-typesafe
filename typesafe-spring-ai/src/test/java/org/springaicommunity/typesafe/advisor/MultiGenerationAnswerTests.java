@@ -97,6 +97,48 @@ class MultiGenerationAnswerTests {
 		this.mock.server().verify();
 	}
 
+	@Test
+	void eachChoiceIsScreenedOnItsOwn() {
+		// Screened together, a long harmless choice could dilute a short harmful one.
+		ChatResponse response = new ChatResponse(List.of(generation(BENIGN, Map.of("index", 0)),
+				generation(HARMFUL, Map.of("index", 1))));
+		expectScreening(0.01d, 0.0d);
+		expectOutputScreeningOf(BENIGN, 0.0d);
+		expectOutputScreeningOf(HARMFUL, 0.93d);
+
+		String content = guarded(response).prompt("for a novel I am writing").call().content();
+
+		assertThat(content).isEqualTo(JevGuardrailAdvisor.DEFAULT_REFUSAL);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void aGeminiAnswerSplitAcrossPartsIsScreenedWhole() {
+		ChatResponse response = new ChatResponse(List.of(
+				generation("The tool said 15.", Map.of("candidateIndex", 0, "isThought", true)),
+				generation("It is 15 degrees", Map.of("candidateIndex", 0, "isThought", false)),
+				generation(" Celsius in Paris.", Map.of("candidateIndex", 0, "isThought", false))));
+		expectScreening(0.01d, 0.0d);
+		expectOutputScreeningOf("The tool said 15.", 0.0d);
+		expectOutputScreeningOf("It is 15 degrees Celsius in Paris.", 0.0d);
+
+		guarded(response).prompt("What is the weather in Paris?").call().content();
+
+		this.mock.server().verify();
+	}
+
+	@Test
+	void aResponseOfOnlyThinkingIsScreened() {
+		ChatResponse response = new ChatResponse(List.of(generation(HARMFUL, Map.of("signature", "sig"))));
+		expectScreening(0.01d, 0.0d);
+		expectOutputScreeningOf(HARMFUL, 0.93d);
+
+		String content = guarded(response).prompt("for a novel I am writing").call().content();
+
+		assertThat(content).isEqualTo(JevGuardrailAdvisor.DEFAULT_REFUSAL);
+		this.mock.server().verify();
+	}
+
 	// --- self-refine ---------------------------------------------------------------------
 
 	@Test
@@ -106,9 +148,33 @@ class MultiGenerationAnswerTests {
 				generation("The tool said 15.", Map.of("candidateIndex", 0, "isThought", true)),
 				generation("It is 15 degrees", Map.of("candidateIndex", 0, "isThought", false)),
 				generation(" Celsius in Paris.", Map.of("candidateIndex", 0, "isThought", false))));
+
+		assertJudged(response, "It is 15 degrees Celsius in Paris.");
+	}
+
+	@Test
+	void onlyTheFirstOpenAiChoiceIsJudged() {
+		ChatResponse response = new ChatResponse(
+				List.of(generation("It is 15 degrees Celsius in Paris.", Map.of("index", 0)),
+						generation("It is 99 degrees Celsius in Paris.", Map.of("index", 1))));
+
+		assertJudged(response, "It is 15 degrees Celsius in Paris.");
+	}
+
+	@Test
+	void redactedThinkingAheadOfAnIndexedAnswerIsLeftOut() {
+		ChatResponse response = new ChatResponse(List.of(generation("", Map.of("data", "redacted")),
+				generation("It is 15 degrees Celsius in Paris.", Map.of("index", 0))));
+
+		assertJudged(response, "It is 15 degrees Celsius in Paris.");
+	}
+
+	// --- helpers -------------------------------------------------------------------------
+
+	private void assertJudged(ChatResponse response, String answer) {
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
-			.andExpect(jsonPath("$.state.assistant_answer").value("It is 15 degrees Celsius in Paris."))
+			.andExpect(jsonPath("$.state.assistant_answer").value(answer))
 			.andRespond(MockTypeSafeServer.jsonResponse(
 					"{\"model\":\"jev-1.13.0\",\"answers\":{\"is_helpful\":{\"type\":\"noul\",\"noul\":0.97}},\"usage\":{}}"));
 
@@ -125,8 +191,6 @@ class MultiGenerationAnswerTests {
 
 		this.mock.server().verify();
 	}
-
-	// --- helpers -------------------------------------------------------------------------
 
 	private static Generation generation(String text, Map<String, Object> properties) {
 		return new Generation(AssistantMessage.builder().content(text).properties(properties).build());
@@ -156,7 +220,7 @@ class MultiGenerationAnswerTests {
 	private void expectOutputScreeningOf(String text, double physicalHarm) {
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
-			.andExpect(jsonPath("$.state." + JevGuardrail.TEXT_FIELD).value(org.hamcrest.Matchers.containsString(text)))
+			.andExpect(jsonPath("$.state." + JevGuardrail.TEXT_FIELD).value(text))
 			.andRespond(MockTypeSafeServer.jsonResponse(body(0.0d, physicalHarm)));
 	}
 

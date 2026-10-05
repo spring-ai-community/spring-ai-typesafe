@@ -12,8 +12,9 @@
   generation per part and flattens every candidate into the same list, and a provider
   asked for several choices returns them all. `JevSelfRefineAdvisor` now judges the
   first choice with its thinking left out and its parts joined. `JevGuardrailAdvisor`
-  now screens the text of every generation, thinking and all choices included, since
-  `ChatClient.content()` returns the first generation, whatever it holds.
+  now screens each choice and each thinking block on its own, and refuses the reply when
+  any of them is blocked, since `ChatClient.content()` returns the first generation,
+  whatever it holds.
 
 ## 0.4.0
 

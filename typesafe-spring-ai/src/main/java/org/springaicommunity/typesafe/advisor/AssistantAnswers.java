@@ -16,10 +16,10 @@
 
 package org.springaicommunity.typesafe.advisor;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -49,43 +49,50 @@ final class AssistantAnswers {
 	 * @return the answer text, empty when there is none
 	 */
 	static String answerOf(ChatClientResponse response) {
-		List<Generation> generations = generationsOf(response);
-		List<Generation> answers = generations.stream().filter(generation -> !isThinking(generation)).toList();
-		if (answers.isEmpty()) {
-			return "";
-		}
-		Object firstChoice = choiceOf(answers.get(0));
-		return answers.stream()
-			.filter(generation -> Objects.equals(choiceOf(generation), firstChoice))
-			.map(AssistantAnswers::textOf)
-			.collect(Collectors.joining());
+		return textsOf(response, false).stream().findFirst().orElse("");
 	}
 
 	/**
-	 * Everything the caller can read: the text of every generation, thinking and every
-	 * choice included. {@code ChatClient.content()} returns the first generation, which
-	 * is the thinking when it is displayed, so all of it has to pass a screen.
+	 * Everything the caller can read, one text per choice (its parts joined) and one per
+	 * thinking block, in the order they come. {@code ChatClient.content()} returns the
+	 * first generation, which is the thinking when it is displayed, so each of them has
+	 * to pass a screen. They are screened apart so that a long harmless text cannot
+	 * dilute a short harmful one.
 	 * @param response the response
-	 * @return the text, empty when there is none
+	 * @return the texts, blank ones left out
 	 */
-	static String visibleTextOf(ChatClientResponse response) {
-		return generationsOf(response).stream()
-			.map(AssistantAnswers::textOf)
-			.filter(StringUtils::hasText)
-			.collect(Collectors.joining(System.lineSeparator()));
+	static List<String> visibleTextsOf(ChatClientResponse response) {
+		return textsOf(response, true).stream().filter(StringUtils::hasText).toList();
 	}
 
-	private static List<Generation> generationsOf(ChatClientResponse response) {
+	private static List<String> textsOf(ChatClientResponse response, boolean withThinking) {
 		if (response.chatResponse() == null || CollectionUtils.isEmpty(response.chatResponse().getResults())) {
 			return List.of();
 		}
-		return response.chatResponse().getResults();
+		// Keyed by choice, or by the generation itself for a thinking block.
+		Map<Object, StringBuilder> texts = new LinkedHashMap<>();
+		for (Generation generation : response.chatResponse().getResults()) {
+			if (isThinking(generation)) {
+				if (withThinking) {
+					texts.put(generation, new StringBuilder(textOf(generation)));
+				}
+			}
+			else {
+				texts.computeIfAbsent(new Choice(choiceOf(generation)), choice -> new StringBuilder())
+					.append(textOf(generation));
+			}
+		}
+		List<String> result = new ArrayList<>(texts.size());
+		texts.values().forEach(text -> result.add(text.toString()));
+		return result;
 	}
 
 	private static boolean isThinking(Generation generation) {
 		Map<String, Object> properties = generation.getOutput().getMetadata();
-		return properties.containsKey("signature") || Boolean.TRUE.equals(properties.get("isThought"))
-				|| Boolean.TRUE.equals(properties.get("thinking"));
+		// Anthropic: signature (thinking), data (redacted thinking), thinking (streamed);
+		// Google GenAI: isThought.
+		return properties.containsKey("signature") || properties.containsKey("data")
+				|| Boolean.TRUE.equals(properties.get("thinking")) || Boolean.TRUE.equals(properties.get("isThought"));
 	}
 
 	private static Object choiceOf(Generation generation) {
@@ -96,6 +103,9 @@ final class AssistantAnswers {
 	private static String textOf(Generation generation) {
 		String text = generation.getOutput().getText();
 		return text == null ? "" : text;
+	}
+
+	private record Choice(Object index) {
 	}
 
 }

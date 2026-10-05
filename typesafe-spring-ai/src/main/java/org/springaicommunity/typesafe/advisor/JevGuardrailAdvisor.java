@@ -154,9 +154,8 @@ public class JevGuardrailAdvisor implements CallAdvisor, StreamAdvisor {
 		ChatClientResponse response = callAdvisorChain.nextCall(chatClientRequest);
 
 		if (this.outputBattery != null) {
-			String answer = AssistantAnswers.visibleTextOf(response);
-			if (!answer.isBlank()) {
-				JevGuardrail.Verdict verdict = this.outputBattery.screen(this.typeSafeClient, answer);
+			for (String text : AssistantAnswers.visibleTextsOf(response)) {
+				JevGuardrail.Verdict verdict = this.outputBattery.screen(this.typeSafeClient, text);
 				if (shouldBlock(verdict)) {
 					logger.warn("Jev guardrail blocked the response: {}", verdict.summary());
 					return refuse(chatClientRequest, verdict);
