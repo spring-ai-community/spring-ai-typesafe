@@ -205,8 +205,9 @@ once per turn:
   unsafe draft is replaced by the refusal before it is judged.
 - A reply can hold **several generations**: thinking blocks (Anthropic, Gemini), a Gemini
   answer split into parts, or several choices when the model is asked for more than one.
-  The output battery screens each choice (its parts joined) and each thinking block on its
-  own, one call each, and refuses the reply when any of them is blocked. The thinking is
+  The output battery screens each choice (its parts joined) and each thinking block (a
+  Gemini candidate's thought parts joined) on its own, one call each, and refuses the reply
+  when any of them is blocked. The thinking is
   screened because `ChatClient.content()` returns the first generation, which is the
   thinking when it is displayed. The price: a safe answer can be refused because its
   reasoning dwelt on a hazard.

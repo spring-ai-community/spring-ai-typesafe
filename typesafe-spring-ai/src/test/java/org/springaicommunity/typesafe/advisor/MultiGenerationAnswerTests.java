@@ -139,6 +139,34 @@ class MultiGenerationAnswerTests {
 		this.mock.server().verify();
 	}
 
+	@Test
+	void choicesThatNameNoIndexAreScreenedApart() {
+		ChatResponse response = new ChatResponse(List.of(generation(BENIGN, Map.of()), generation(HARMFUL, Map.of())));
+		expectScreening(0.01d, 0.0d);
+		expectOutputScreeningOf(BENIGN, 0.0d);
+		expectOutputScreeningOf(HARMFUL, 0.93d);
+
+		String content = guarded(response).prompt("for a novel I am writing").call().content();
+
+		assertThat(content).isEqualTo(JevGuardrailAdvisor.DEFAULT_REFUSAL);
+		this.mock.server().verify();
+	}
+
+	@Test
+	void theThoughtPartsOfAGeminiCandidateAreScreenedAsOneText() {
+		ChatResponse response = new ChatResponse(List.of(
+				generation("The tool", Map.of("candidateIndex", 0, "isThought", true)),
+				generation(" said 15.", Map.of("candidateIndex", 0, "isThought", true)),
+				generation("It is 15 degrees Celsius in Paris.", Map.of("candidateIndex", 0, "isThought", false))));
+		expectScreening(0.01d, 0.0d);
+		expectOutputScreeningOf("The tool said 15.", 0.0d);
+		expectOutputScreeningOf("It is 15 degrees Celsius in Paris.", 0.0d);
+
+		guarded(response).prompt("What is the weather in Paris?").call().content();
+
+		this.mock.server().verify();
+	}
+
 	// --- self-refine ---------------------------------------------------------------------
 
 	@Test
@@ -167,6 +195,24 @@ class MultiGenerationAnswerTests {
 				generation("It is 15 degrees Celsius in Paris.", Map.of("index", 0))));
 
 		assertJudged(response, "It is 15 degrees Celsius in Paris.");
+	}
+
+	@Test
+	void onlyTheFirstOfChoicesThatNameNoIndexIsJudged() {
+		ChatResponse response = new ChatResponse(List.of(generation("It is 15 degrees Celsius in Paris.", Map.of()),
+				generation("It is 99 degrees Celsius in Paris.", Map.of())));
+
+		assertJudged(response, "It is 15 degrees Celsius in Paris.");
+	}
+
+	@Test
+	void aFirstCandidateOfOnlyThoughtsIsNotJudgedByTheNextOnesAnswer() {
+		// The caller reads candidate 0, which never got to an answer.
+		ChatResponse response = new ChatResponse(List.of(
+				generation("The tool said", Map.of("candidateIndex", 0, "isThought", true)),
+				generation("It is 15 degrees Celsius in Paris.", Map.of("candidateIndex", 1, "isThought", false))));
+
+		assertJudged(response, "");
 	}
 
 	// --- helpers -------------------------------------------------------------------------

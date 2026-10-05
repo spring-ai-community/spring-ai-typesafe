@@ -17,9 +17,9 @@
 package org.springaicommunity.typesafe.advisor;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.springframework.ai.chat.client.ChatClientResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -44,47 +44,71 @@ final class AssistantAnswers {
 
 	/**
 	 * The answer to judge: the text of the first choice, thinking left out, its parts
-	 * joined.
+	 * joined. The first choice is the one the response opens with, so when that choice
+	 * holds nothing but thinking the answer is empty, not the next choice's.
 	 * @param response the response
 	 * @return the answer text, empty when there is none
 	 */
 	static String answerOf(ChatClientResponse response) {
-		return textsOf(response, false).stream().findFirst().orElse("");
+		List<Generation> generations = generationsOf(response);
+		Object firstChoice = generations.stream()
+			.map(AssistantAnswers::choiceOf)
+			.filter(Objects::nonNull)
+			.findFirst()
+			.orElse(null);
+		return textsOf(generations).stream()
+			.filter(text -> !text.thinking())
+			.filter(text -> firstChoice == null || firstChoice.equals(text.choice()))
+			.map(text -> text.text().toString())
+			.findFirst()
+			.orElse("");
 	}
 
 	/**
-	 * Everything the caller can read, one text per choice (its parts joined) and one per
-	 * thinking block, in the order they come. {@code ChatClient.content()} returns the
-	 * first generation, which is the thinking when it is displayed, so each of them has
-	 * to pass a screen. They are screened apart so that a long harmless text cannot
+	 * Everything the caller can read, in the order it comes: one text per choice (its
+	 * parts joined) and one per stretch of thinking. {@code ChatClient.content()} returns
+	 * the first generation, which is the thinking when it is displayed, so each of them
+	 * has to pass a screen. They are screened apart so that a long harmless text cannot
 	 * dilute a short harmful one.
 	 * @param response the response
 	 * @return the texts, blank ones left out
 	 */
 	static List<String> visibleTextsOf(ChatClientResponse response) {
-		return textsOf(response, true).stream().filter(StringUtils::hasText).toList();
+		return textsOf(generationsOf(response)).stream()
+			.map(text -> text.text().toString())
+			.filter(StringUtils::hasText)
+			.toList();
 	}
 
-	private static List<String> textsOf(ChatClientResponse response, boolean withThinking) {
+	private static List<Generation> generationsOf(ChatClientResponse response) {
 		if (response.chatResponse() == null || CollectionUtils.isEmpty(response.chatResponse().getResults())) {
 			return List.of();
 		}
-		// Keyed by choice, or by the generation itself for a thinking block.
-		Map<Object, StringBuilder> texts = new LinkedHashMap<>();
-		for (Generation generation : response.chatResponse().getResults()) {
-			if (isThinking(generation)) {
-				if (withThinking) {
-					texts.put(generation, new StringBuilder(textOf(generation)));
-				}
+		return response.chatResponse().getResults();
+	}
+
+	/**
+	 * Joins the generations that are parts of one text: the answer parts of a choice, and
+	 * the thinking parts of a choice. A generation that names no choice stands alone, as
+	 * nothing says what it would belong to.
+	 */
+	private static List<Text> textsOf(List<Generation> generations) {
+		List<Text> texts = new ArrayList<>();
+		for (Generation generation : generations) {
+			boolean thinking = isThinking(generation);
+			Object choice = choiceOf(generation);
+			Text text = (choice == null) ? null
+					: texts.stream()
+						.filter(candidate -> candidate.thinking() == thinking && choice.equals(candidate.choice()))
+						.findFirst()
+						.orElse(null);
+			if (text == null) {
+				text = new Text(thinking, choice, new StringBuilder());
+				texts.add(text);
 			}
-			else {
-				texts.computeIfAbsent(new Choice(choiceOf(generation)), choice -> new StringBuilder())
-					.append(textOf(generation));
-			}
+			text.text().append(textOf(generation));
 		}
-		List<String> result = new ArrayList<>(texts.size());
-		texts.values().forEach(text -> result.add(text.toString()));
-		return result;
+		return texts;
 	}
 
 	private static boolean isThinking(Generation generation) {
@@ -105,7 +129,7 @@ final class AssistantAnswers {
 		return text == null ? "" : text;
 	}
 
-	private record Choice(Object index) {
+	private record Text(boolean thinking, Object choice, StringBuilder text) {
 	}
 
 }
