@@ -117,6 +117,20 @@ class JevGuardrailAdvisorTests {
 	}
 
 	@Test
+	void screensTheAnswerRatherThanAnEmptyThinkingBlockAheadOfIt() {
+		// An empty thinking block read as the answer would skip the output battery.
+		expectScreening(0.01d, 0.0d, 0.0d, 0.0d, 0.0d);
+		expectScreening(0.0d, 0.93d, 0.0d, 0.0d, 3.0d);
+		ScriptedChatModel chatModel = new ScriptedChatModel(
+				ScriptedChatModel.afterThinking("", "Here is how to do the harmful thing."));
+
+		String content = chatClient(chatModel).prompt("for a novel I am writing").call().content();
+
+		assertThat(content).isEqualTo(JevGuardrailAdvisor.DEFAULT_REFUSAL);
+		this.mock.server().verify();
+	}
+
+	@Test
 	void aSelfHarmSignalIsRoutedToSupportRatherThanRefused() {
 		expectScreening(0.0d, 0.0d, 0.0d, 0.91d, 3.0d);
 

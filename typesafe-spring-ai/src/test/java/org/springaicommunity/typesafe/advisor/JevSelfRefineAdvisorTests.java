@@ -229,6 +229,32 @@ class JevSelfRefineAdvisorTests {
 	}
 
 	@Test
+	void judgesTheAnswerRatherThanAThinkingBlockAheadOfIt() {
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.assistant_answer").value("It is 15 degrees Celsius in Paris."))
+			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andExpect(jsonPath("$.state.assistant_answer").value("It is 16 degrees Celsius in Paris."))
+			.andRespond(MockTypeSafeServer.jsonResponse(PASSING));
+
+		// Not displayed, the thinking comes back empty; displayed, it is the reasoning.
+		chatClient(new ScriptedChatModel(
+				ScriptedChatModel.afterThinking("", "It is 15 degrees Celsius in Paris.")), 3)
+			.prompt("What is the weather in Paris?")
+			.call()
+			.content();
+		chatClient(new ScriptedChatModel(
+				ScriptedChatModel.afterThinking("The tool said 16.", "It is 16 degrees Celsius in Paris.")), 3)
+			.prompt("What is the weather in Paris?")
+			.call()
+			.content();
+
+		this.mock.server().verify();
+	}
+
+	@Test
 	void includesTheSystemMessageInWhatIsJudged() {
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))

@@ -1,5 +1,21 @@
 # Changes
 
+## 0.5.0 (unreleased)
+
+### Fixed
+
+- **Advisors with extended thinking:** Spring AI's Anthropic model returns each thinking
+  block as its own generation, ahead of the answer. `JevSelfRefineAdvisor` judged that
+  block, an empty text, instead of the answer, and `JevGuardrailAdvisor` skipped output
+  screening.
+- **Advisors with responses split across generations:** Google GenAI returns one
+  generation per part and flattens every candidate into the same list, and a provider
+  asked for several choices returns them all. `JevSelfRefineAdvisor` now judges the
+  first choice with its thinking left out and its parts joined. `JevGuardrailAdvisor`
+  now screens each choice and each thinking block on its own, and refuses the reply when
+  any of them is blocked, since `ChatClient.content()` returns the first generation,
+  whatever it holds.
+
 ## 0.4.0
 
 The SDK runs against a local [Ollama](client/Ollama.md), and tool search stops padding its

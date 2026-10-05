@@ -203,6 +203,14 @@ once per turn:
   any text alongside a tool call. A reply that is only a tool call has no text and is
   skipped. Every answer the self-refine advisor could return has been screened, and an
   unsafe draft is replaced by the refusal before it is judged.
+- A reply can hold **several generations**: thinking blocks (Anthropic, Gemini), a Gemini
+  answer split into parts, or several choices when the model is asked for more than one.
+  The output battery screens each choice (its parts joined) and each thinking block (a
+  Gemini candidate's thought parts joined) on its own, one call each, and refuses the reply
+  when any of them is blocked. The thinking is
+  screened because `ChatClient.content()` returns the first generation, which is the
+  thinking when it is displayed. The price: a safe answer can be refused because its
+  reasoning dwelt on a hazard.
 - The **input battery** screens the user message on each of those calls too, so a turn with
   retries or tool calls pays for it more than once. On a retry, the message it screens
   carries the judge's feedback.
