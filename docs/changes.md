@@ -7,7 +7,13 @@
 - **Advisors with extended thinking:** Spring AI's Anthropic model returns each thinking
   block as its own generation, ahead of the answer. `JevSelfRefineAdvisor` judged that
   block, an empty text, instead of the answer, and `JevGuardrailAdvisor` skipped output
-  screening. Both now read the answer.
+  screening.
+- **Advisors with responses split across generations:** Google GenAI returns one
+  generation per part and flattens every candidate into the same list, and a provider
+  asked for several choices returns them all. `JevSelfRefineAdvisor` now judges the
+  first choice with its thinking left out and its parts joined. `JevGuardrailAdvisor`
+  now screens the text of every generation, thinking and all choices included, since
+  `ChatClient.content()` returns the first generation, whatever it holds.
 
 ## 0.4.0
 

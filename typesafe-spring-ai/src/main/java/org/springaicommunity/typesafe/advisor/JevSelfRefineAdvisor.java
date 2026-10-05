@@ -300,7 +300,7 @@ public class JevSelfRefineAdvisor implements CallAdvisor, StreamAdvisor {
 		// loop executes with its own, unwrapped, callbacks.
 		return JevJudgeInput.builder()
 			.question(getPromptQuestion(chatClientRequest))
-			.answer(AssistantAnswers.textOf(response))
+			.answer(AssistantAnswers.answerOf(response))
 			.toolCalls(getToolCalls(chatClientRequest))
 			.toolCalls(List.copyOf(recorded))
 			.build();
