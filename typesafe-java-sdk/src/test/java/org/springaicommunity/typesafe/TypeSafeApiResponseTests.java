@@ -18,6 +18,7 @@ package org.springaicommunity.typesafe;
 
 
 
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -149,6 +150,48 @@ class TypeSafeApiResponseTests {
 			assertThat(unknown.typeName()).isEqualTo("vector");
 			assertThat(unknown.type()).isEqualTo(AnswerType.UNKNOWN);
 			assertThat(unknown.raw()).containsKey("vector");
+			// An object answer is preserved as it stands; only a non-object one is wrapped.
+			assertThat(unknown.raw()).doesNotContainKey(UnknownAnswer.VALUE_KEY);
+		});
+	}
+
+	@Test
+	void surfacesAnAnswerThatIsNotAnObjectInsteadOfFailing() {
+		// A future primitive may answer with a bare value rather than an object. Binding one
+		// to a map used to throw, failing the whole call, including the noul that sits next
+		// to it and is perfectly readable.
+		SystemOneResponse response = evaluate("""
+				{"model":"jev-1.13.0","answers":{
+				  "is_urgent":{"type":"noul","noul":0.4},
+				  "a_number":0.5,
+				  "a_string":"text",
+				  "a_boolean":true,
+				  "a_list":[1,2]
+				},"usage":{}}""");
+
+		assertThat(response.noulValue("is_urgent")).isEqualTo(0.4);
+
+		assertThat(response.answer("a_number")).isInstanceOfSatisfying(UnknownAnswer.class, unknown -> {
+			assertThat(unknown.typeName()).isNull();
+			assertThat(unknown.type()).isEqualTo(AnswerType.UNKNOWN);
+			assertThat(unknown.raw()).containsEntry(UnknownAnswer.VALUE_KEY, 0.5d);
+		});
+		assertThat(response.answer("a_string")).isInstanceOfSatisfying(UnknownAnswer.class,
+				unknown -> assertThat(unknown.raw()).containsEntry(UnknownAnswer.VALUE_KEY, "text"));
+		assertThat(response.answer("a_boolean")).isInstanceOfSatisfying(UnknownAnswer.class,
+				unknown -> assertThat(unknown.raw()).containsEntry(UnknownAnswer.VALUE_KEY, true));
+		assertThat(response.answer("a_list")).isInstanceOfSatisfying(UnknownAnswer.class,
+				unknown -> assertThat(unknown.raw()).containsEntry(UnknownAnswer.VALUE_KEY, List.of(1, 2)));
+	}
+
+	@Test
+	void keepsAJsonNullAnswerAsAnUnknownAnswerWithNoPayload() {
+		SystemOneResponse response = evaluate("""
+				{"model":"jev-1.13.0","answers":{"nothing":null},"usage":{}}""");
+
+		assertThat(response.answer("nothing")).isInstanceOfSatisfying(UnknownAnswer.class, unknown -> {
+			assertThat(unknown.typeName()).isNull();
+			assertThat(unknown.raw()).isEmpty();
 		});
 	}
 

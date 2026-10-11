@@ -35,6 +35,8 @@ import org.jspecify.annotations.Nullable;
  */
 public record UnknownAnswer(@Nullable String typeName, Map<String, Object> raw) implements Answer {
 
+	public static final String VALUE_KEY = "value";
+
 	public UnknownAnswer {
 		// Not Map.copyOf: it rejects null values, and an unmodelled answer is exactly the
 		// place a JSON null may turn up. Failing here would defeat the fallback.

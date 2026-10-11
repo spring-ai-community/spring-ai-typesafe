@@ -61,10 +61,25 @@ class AnswerDeserializer extends ValueDeserializer<Answer> {
 		};
 	}
 
+	@Override
+	public Answer getNullValue(DeserializationContext context) {
+		return new UnknownAnswer(null, Map.of());
+	}
+
 	private UnknownAnswer toUnknown(@Nullable String typeName, JsonNode node, DeserializationContext context) {
-		Map<String, Object> raw = context.readTreeAsValue(node, context.getTypeFactory()
-			.constructMapType(LinkedHashMap.class, String.class, Object.class));
-		return new UnknownAnswer(typeName, raw);
+		return new UnknownAnswer(typeName, rawOf(node, context));
+	}
+
+	private static Map<String, Object> rawOf(JsonNode node, DeserializationContext context) {
+		if (node.isNull()) {
+			return Map.of();
+		}
+		if (node.isObject()) {
+			return context.readTreeAsValue(node,
+					context.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class));
+		}
+		Object value = context.readTreeAsValue(node, Object.class);
+		return value == null ? Map.of() : Map.of(UnknownAnswer.VALUE_KEY, value);
 	}
 
 }
