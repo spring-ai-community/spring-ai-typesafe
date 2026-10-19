@@ -159,8 +159,8 @@ for (ModelMetadata model : client.listModels()) {
 ```
 
 `TypeSafeModels` names the known ids: `JEV_LATEST`, `JEV_PREVIEW` and the pinned
-`JEV_1_13_0`. Aliases resolve server-side, and the response reports the version it resolved
-to — so asking for `jev-latest` comes back as `jev-1.13.0`.
+`JEV_1_13_0` and `JEV_1_14_0`. Aliases resolve server-side, and the response reports the version it resolved
+to — for example, asking for `jev-latest` comes back as `jev-1.13.0`, while `jev-preview` comes back as `jev-1.14.0`.
 
 ## Which Jackson mapper serializes your request
 

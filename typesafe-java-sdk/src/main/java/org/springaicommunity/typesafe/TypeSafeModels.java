@@ -32,8 +32,11 @@ public final class TypeSafeModels {
 	/** Alias tracking the current preview release. */
 	public static final String JEV_PREVIEW = "jev-preview";
 
-	/** Pinned version behind both aliases at the time of writing. */
+	/** Pinned version behind the {@link #JEV_LATEST} alias at the time of writing. */
 	public static final String JEV_1_13_0 = "jev-1.13.0";
+
+	/** Pinned version behind the {@link #JEV_PREVIEW} alias at the time of writing. */
+	public static final String JEV_1_14_0 = "jev-1.14.0";
 
 	private TypeSafeModels() {
 	}
