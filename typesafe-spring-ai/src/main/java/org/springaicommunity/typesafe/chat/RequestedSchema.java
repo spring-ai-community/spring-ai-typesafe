@@ -18,6 +18,7 @@ package org.springaicommunity.typesafe.chat;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,10 +42,12 @@ import org.springframework.util.StringUtils;
  * Every field of the schema needs a question of the same name whose answer fits its type: a
  * choice's label into a string (and into every value of an enum), a noul's or score's value
  * into a floating-point number. Local {@code $ref}s and {@code anyOf}/{@code oneOf}
- * alternatives are followed, {@code null} alternatives are ignored, and a field whose schema
- * declares no type is accepted unchecked. The schema's top level must be an object, since
- * the reply is one. Questions the type does not ask for are fine; they are left out of the
- * reply.
+ * alternatives are followed, including a root reference, {@code null} alternatives are
+ * ignored, and a field whose schema declares no type is accepted unchecked. Direct
+ * properties beside a root union stay in force. Object alternatives must declare the same
+ * fields, because the reply has no branch to choose. The schema's top level must be an
+ * object, since the reply is one. Questions the type does not ask for are fine; they are
+ * left out of the reply.
  *
  * @author Christian Tzolov
  */
@@ -87,23 +90,25 @@ final class RequestedSchema {
 	 */
 	static RequestedSchema parse(String schema, Map<String, Question> questions) {
 		JsonNode root = JSON.readTree(schema);
-		Set<String> rootTypes = typesOf(alternatives(root, root, 0));
+		List<JsonNode> rootAlternatives = alternatives(root, root, 0);
+		Set<String> rootTypes = typesOf(rootAlternatives);
 		if (!rootTypes.isEmpty() && !rootTypes.contains("object")) {
 			throw new IllegalArgumentException("JevChatModel replies with a JSON object, one field per question, "
 					+ "so it cannot produce a " + rootTypes + "; request a record or a class instead");
 		}
 		Set<String> fields = new LinkedHashSet<>();
-		for (Map.Entry<String, JsonNode> property : root.path("properties").properties()) {
+		for (Map.Entry<String, List<JsonNode>> property : propertiesOf(root, rootAlternatives).entrySet()) {
 			String field = property.getKey();
 			Question question = questions.get(field);
 			if (question == null) {
 				throw new IllegalArgumentException("The requested type has a field '" + field
 						+ "' that no question answers; the questions are " + questions.keySet());
 			}
-			List<JsonNode> alternatives = alternatives(property.getValue(), root, 0);
+			List<JsonNode> propertyAlternatives = new ArrayList<>();
+			property.getValue().forEach(value -> propertyAlternatives.addAll(alternatives(value, root, 0)));
 			if (question instanceof Choice choice) {
-				requireType(field, alternatives, "string", "a choice's label");
-				List<String> values = enumValuesOf(alternatives);
+				requireType(field, propertyAlternatives, "string", "a choice's label");
+				List<String> values = enumValuesOf(propertyAlternatives);
 				if (values != null) {
 					choice.criteria().keySet().forEach(option -> {
 						if (!values.contains(option)) {
@@ -114,7 +119,7 @@ final class RequestedSchema {
 				}
 			}
 			else {
-				requireType(field, alternatives, "number", "a floating-point number");
+				requireType(field, propertyAlternatives, "number", "a floating-point number");
 			}
 			fields.add(field);
 		}
@@ -199,6 +204,63 @@ final class RequestedSchema {
 			throw new IllegalArgumentException("Field '" + field + "' is of type " + types + " but receives " + answer
 					+ ", which needs " + expected);
 		}
+	}
+
+	/**
+	 * Fields of the resolved root. Direct properties on a {@code $ref}, {@code anyOf}, or
+	 * {@code oneOf} wrapper are composed into each object alternative. Alternatives with
+	 * different field sets are rejected: this renderer has no input with which to choose a
+	 * branch.
+	 */
+	private static Map<String, List<JsonNode>> propertiesOf(JsonNode root, List<JsonNode> rootAlternatives) {
+		Map<String, List<JsonNode>> direct = directPropertiesOf(root);
+		List<Map<String, List<JsonNode>>> shapes = new ArrayList<>();
+		rootAlternatives.stream().filter(RequestedSchema::canBeObject).forEach(alternative -> {
+			if (alternative == root) {
+				shapes.add(copyOf(direct));
+			}
+			else {
+				Map<String, List<JsonNode>> shape = copyOf(direct);
+				directPropertiesOf(alternative).forEach((field, schemas) -> shape
+					.computeIfAbsent(field, key -> new ArrayList<>())
+					.addAll(schemas));
+				shapes.add(shape);
+			}
+		});
+		if (shapes.isEmpty()) {
+			return direct;
+		}
+
+		Map<String, List<JsonNode>> properties = shapes.get(0);
+		Set<String> fields = properties.keySet();
+		for (int i = 1; i < shapes.size(); i++) {
+			Map<String, List<JsonNode>> alternative = shapes.get(i);
+			if (!fields.equals(alternative.keySet())) {
+				throw new IllegalArgumentException("The requested type has object alternatives with different fields: "
+						+ fields + " and " + alternative.keySet()
+						+ "; polymorphic root object shapes are not supported");
+			}
+			fields.forEach(field -> properties.get(field).addAll(alternative.get(field)));
+		}
+		return properties;
+	}
+
+	private static Map<String, List<JsonNode>> directPropertiesOf(JsonNode schema) {
+		Map<String, List<JsonNode>> properties = new LinkedHashMap<>();
+		schema.path("properties").properties().forEach(property -> properties.put(property.getKey(),
+				new ArrayList<>(List.of(property.getValue()))));
+		return properties;
+	}
+
+	private static Map<String, List<JsonNode>> copyOf(Map<String, List<JsonNode>> source) {
+		Map<String, List<JsonNode>> copy = new LinkedHashMap<>();
+		source.forEach((field, schemas) -> copy.put(field, new ArrayList<>(schemas)));
+		return copy;
+	}
+
+	private static boolean canBeObject(JsonNode alternative) {
+		Set<String> types = typesOf(List.of(alternative));
+		return types.contains("object") || (types.isEmpty() && alternative.path("properties").isObject());
 	}
 
 }

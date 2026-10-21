@@ -133,6 +133,76 @@ class RequestedSchemaTests {
 		assertThat(RequestedSchema.parse(cyclic, QUESTIONS).fields()).containsExactly("team");
 	}
 
+	@Test
+	void followsARootRefIntoDefs() {
+		String schema = """
+				{
+				  "$defs": {
+				    "Triage": {
+				      "type": "object",
+				      "properties": {
+				        "severity": {"type": "number"},
+				        "team": {"type": "string"}
+				      }
+				    }
+				  },
+				  "$ref": "#/$defs/Triage"
+				}
+				""";
+
+		assertThat(RequestedSchema.parse(schema, QUESTIONS).fields()).containsExactly("severity", "team");
+	}
+
+	@Test
+	void followsARootRefThroughANullableUnion() {
+		String schema = """
+				{
+				  "$defs": {
+				    "Triage": {
+				      "type": "object",
+				      "properties": {"team": {"type": "string"}}
+				    }
+				  },
+				  "anyOf": [{"$ref": "#/$defs/Triage"}, {"type": "null"}]
+				}
+				""";
+
+		assertThat(RequestedSchema.parse(schema, QUESTIONS).fields()).containsExactly("team");
+	}
+
+	@Test
+	void keepsDirectRootPropertiesAlongsideAUnion() {
+		String schema = """
+				{
+				  "type": "object",
+				  "properties": {"team": {"type": "string"}},
+				  "anyOf": [
+				    {"required": ["team"]},
+				    {"minProperties": 1}
+				  ]
+				}
+				""";
+
+		assertThat(RequestedSchema.parse(schema, QUESTIONS).fields()).containsExactly("team");
+	}
+
+	@Test
+	void rejectsRootObjectAlternativesWithDifferentFields() {
+		String schema = """
+				{
+				  "oneOf": [
+				    {"type": "object", "properties": {"team": {"type": "string"}}},
+				    {"type": "object", "properties": {"urgent": {"type": "number"}}}
+				  ]
+				}
+				""";
+
+		assertThatIllegalArgumentException().isThrownBy(() -> RequestedSchema.parse(schema, QUESTIONS))
+			.withMessageContaining("object alternatives with different fields")
+			.withMessageContaining("[team]")
+			.withMessageContaining("[urgent]");
+	}
+
 	private static String object(String properties) {
 		return "{\"type\":\"object\",\"properties\":{" + properties + "}}";
 	}

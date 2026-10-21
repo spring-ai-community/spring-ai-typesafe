@@ -186,6 +186,50 @@ class JevChatModelTests {
 	}
 
 	@Test
+	void repliesWithFieldsDeclaredBehindARootRef() {
+		respondWith(TRIAGE_RESPONSE);
+		String schema = """
+				{
+				  "$defs": {
+				    "TeamOnly": {
+				      "type": "object",
+				      "properties": {"team": {"type": "string"}},
+				      "required": ["team"]
+				    }
+				  },
+				  "$ref": "#/$defs/TeamOnly"
+				}
+				""";
+		ChatOptions options = StructuredOutputChatOptions.builder().outputSchema(schema).build();
+
+		ChatResponse response = triageModel().call(new Prompt(TICKET, options));
+
+		assertThat(response.getResult().getOutput().getText()).isEqualTo("{\"team\":\"infra\"}");
+		this.mock.server().verify();
+	}
+
+	@Test
+	void repliesWithDirectFieldsAlongsideARootUnion() {
+		respondWith(TRIAGE_RESPONSE);
+		String schema = """
+				{
+				  "type": "object",
+				  "properties": {"team": {"type": "string"}},
+				  "anyOf": [
+				    {"required": ["team"]},
+				    {"minProperties": 1}
+				  ]
+				}
+				""";
+		ChatOptions options = StructuredOutputChatOptions.builder().outputSchema(schema).build();
+
+		ChatResponse response = triageModel().call(new Prompt(TICKET, options));
+
+		assertThat(response.getResult().getOutput().getText()).isEqualTo("{\"team\":\"infra\"}");
+		this.mock.server().verify();
+	}
+
+	@Test
 	void carriesTheFullResponseUsageAndModelInTheMetadata() {
 		respondWith(TRIAGE_RESPONSE);
 
