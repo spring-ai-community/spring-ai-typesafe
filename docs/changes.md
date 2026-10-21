@@ -1,5 +1,18 @@
 # Changes
 
+## Unreleased
+
+### Fixed
+
+- **A root JSON Schema reference is resolved before the answer is rendered.**
+  `RequestedSchema` followed `$ref`, `anyOf`, and `oneOf` only to decide the root type, then
+  read `properties` from the unresolved root. A schema whose root is
+  `$ref: "#/$defs/..."` therefore had no fields, and `JevChatModel` rendered `{}` even when
+  System One returned a valid answer. Fields now come from the resolved object shape. Direct
+  properties beside a root union are kept. Object alternatives that declare different fields
+  are rejected, because this renderer has no branch to choose. See
+  [#32](https://github.com/spring-ai-community/spring-ai-typesafe/issues/32).
+
 ## 0.4.0
 
 The SDK runs against a local [Ollama](client/Ollama.md), and tool search stops padding its
