@@ -1,5 +1,18 @@
 # Changes
 
+## Unreleased
+
+### Fixed
+
+- **A rejected batch submission stays in its result slot.** `systemOneAll` handed every
+  request to `CompletableFuture.supplyAsync` before the call-width limit applied. A bounded
+  caller executor could throw `RejectedExecutionException` before that request started, so
+  the exception escaped and the caller received no aligned results. The rejection is now a
+  `TypeSafeException` in that request's slot, with the original rejection as its cause.
+  Accepted work is still joined. `failFast` skips work that has not started; it does not
+  promise that no further task was submitted before the first failure became visible. See
+  [#34](https://github.com/spring-ai-community/spring-ai-typesafe/issues/34).
+
 ## 0.4.0
 
 The SDK runs against a local [Ollama](client/Ollama.md), and tool search stops padding its

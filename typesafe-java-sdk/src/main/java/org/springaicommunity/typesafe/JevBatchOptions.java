@@ -33,7 +33,8 @@ import org.springframework.util.Assert;
  * question asked about many different states, which is genuinely one call per item.
  *
  * @param concurrency how many requests may be in flight at once
- * @param failFast whether to stop submitting further requests after the first failure
+ * @param failFast whether to skip work that has not started after the first failure. A
+ * failure does not guarantee that no further task was already submitted
  * @param executor the executor to run on, or {@code null} to create and dispose a pool per
  * batch
  * @author Christian Tzolov
@@ -66,7 +67,8 @@ public record JevBatchOptions(int concurrency, boolean failFast, @Nullable Execu
 	}
 
 	/**
-	 * @param failFast whether to stop submitting after the first failure
+	 * @param failFast whether to skip work that has not started after the first failure. Work
+	 * already submitted still runs
 	 * @return a copy with that setting
 	 */
 	public JevBatchOptions withFailFast(boolean failFast) {

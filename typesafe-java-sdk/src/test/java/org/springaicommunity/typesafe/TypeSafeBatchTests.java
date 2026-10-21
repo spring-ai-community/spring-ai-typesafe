@@ -21,8 +21,14 @@ package org.springaicommunity.typesafe;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -238,6 +244,108 @@ class TypeSafeBatchTests {
 				.hasRootCauseInstanceOf(IllegalStateException.class);
 		});
 		assertThat(results.get(0).failure()).hasMessageContaining("Request 0 failed");
+	}
+
+	@Test
+	void keepsBoundedExecutorRejectionsInTheirResultSlots() throws InterruptedException {
+		CountDownLatch occupied = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		ThreadPoolExecutor caller = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new SynchronousQueue<>(),
+				new ThreadPoolExecutor.AbortPolicy());
+		caller.execute(() -> {
+			occupied.countDown();
+			try {
+				release.await();
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+			}
+		});
+
+		try {
+			assertThat(occupied.await(5, TimeUnit.SECONDS)).isTrue();
+			List<JevBatchResult<SystemOneResponse>> results = this.mock.client()
+				.systemOneAll(requests(2), JevBatchOptions.ofConcurrency(1).withExecutor(caller));
+
+			assertThat(results).hasSize(2);
+			assertThat(results).extracting(JevBatchResult::index).containsExactly(0, 1);
+			assertThat(results).allSatisfy(result -> {
+				assertThat(result.succeeded()).isFalse();
+				assertThat(result.failure()).isInstanceOf(TypeSafeException.class)
+					.hasRootCauseInstanceOf(RejectedExecutionException.class)
+					.hasMessageContaining("rejected by the batch executor");
+			});
+			assertThat(caller.isShutdown()).isFalse();
+			this.mock.server().verify();
+		}
+		finally {
+			release.countDown();
+			caller.shutdownNow();
+		}
+	}
+
+	@Test
+	void joinsAcceptedWorkAlongsideARejectedSlotWithFailFast() {
+		CountDownLatch apiStarted = new CountDownLatch(1);
+		CountDownLatch releaseApi = new CountDownLatch(1);
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(request -> {
+				apiStarted.countDown();
+				try {
+					if (!releaseApi.await(5, TimeUnit.SECONDS)) {
+						throw new IllegalStateException("rejected submission did not release the accepted call");
+					}
+				}
+				catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException("accepted call was interrupted", ex);
+				}
+				return MockTypeSafeServer
+					.jsonResponse("{\"model\":\"jev-1.13.0\",\"answers\":{"
+							+ "\"probe\":{\"type\":\"noul\",\"noul\":0.5}},\"usage\":{}}")
+					.createResponse(request);
+			});
+
+		ThreadPoolExecutor delegate = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new SynchronousQueue<>(),
+				(command, executor) -> {
+					releaseApi.countDown();
+					throw new RejectedExecutionException("executor is full");
+				});
+		AtomicInteger submissions = new AtomicInteger();
+		Executor caller = command -> {
+			int submission = submissions.getAndIncrement();
+			delegate.execute(command);
+			if (submission == 0) {
+				try {
+					if (!apiStarted.await(5, TimeUnit.SECONDS)) {
+						throw new IllegalStateException("accepted call did not reach the API");
+					}
+				}
+				catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException("waiting for the accepted call was interrupted", ex);
+				}
+			}
+		};
+
+		try {
+			List<JevBatchResult<SystemOneResponse>> results = this.mock.client()
+				.systemOneAll(requests(2),
+						JevBatchOptions.ofConcurrency(1).withFailFast(true).withExecutor(caller));
+
+			assertThat(results).hasSize(2);
+			assertThat(results.get(0).succeeded()).isTrue();
+			assertThat(results.get(0).orThrow().noulValue("probe")).isEqualTo(0.5d);
+			assertThat(results.get(1).failure()).isInstanceOf(TypeSafeException.class)
+				.hasRootCauseInstanceOf(RejectedExecutionException.class);
+			assertThat(delegate.isShutdown()).isFalse();
+			this.mock.server().verify();
+		}
+		finally {
+			releaseApi.countDown();
+			delegate.shutdownNow();
+		}
 	}
 
 	private List<SystemOneRequest> requests(int count) {

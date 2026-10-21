@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -245,8 +246,10 @@ public class TypeSafeClient {
 	 * Each request carries the client's own retry policy, so a transient failure is retried
 	 * within the request rather than failing its slot. A request that fails for good does
 	 * not abort the batch: its slot holds the failure and the rest still run, unless
-	 * {@link JevBatchOptions#failFast()} is set. Results stay aligned with the input, so
-	 * {@code results.get(i)} always answers {@code requests.get(i)}.
+	 * {@link JevBatchOptions#failFast()} is set. A caller executor that rejects a submission
+	 * before that request starts is the same shape: the slot holds a {@link TypeSafeException}
+	 * caused by the rejection, and every future already accepted is still joined. Results stay
+	 * aligned with the input, so {@code results.get(i)} always answers {@code requests.get(i)}.
 	 * @param requests the requests
 	 * @param options how wide to run, and on which executor
 	 * @return one result per request, in the order submitted
@@ -273,8 +276,19 @@ public class TypeSafeClient {
 			for (int i = 0; i < requests.size(); i++) {
 				int index = i;
 				SystemOneRequest request = requests.get(i);
-				futures.add(CompletableFuture.supplyAsync(() -> runOne(index, request, options, permits, aborted),
-						executor));
+				try {
+					futures.add(CompletableFuture.supplyAsync(
+							() -> runOne(index, request, options, permits, aborted), executor));
+				}
+				catch (RejectedExecutionException ex) {
+					// A bounded caller executor can reject before runOne starts, where its
+					// exception handling cannot see the failure. Keep that rejection in the
+					// request's slot so one saturated executor does not cost every result.
+					aborted.set(true);
+					futures.add(CompletableFuture.completedFuture(new JevBatchResult<>(index, null,
+							new TypeSafeException("Request %d was rejected by the batch executor".formatted(index),
+									ex))));
+				}
 			}
 			return futures.stream().map(CompletableFuture::join).toList();
 		}
