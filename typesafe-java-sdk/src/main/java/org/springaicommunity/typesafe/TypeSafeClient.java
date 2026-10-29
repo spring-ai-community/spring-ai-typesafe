@@ -221,6 +221,28 @@ public class TypeSafeClient {
 	}
 
 	/**
+	 * Answers a request on the supplied executor, so the calling thread is not held for
+	 * the duration of the call. The call itself, retries included, is the same blocking
+	 * call as {@link #systemOne(SystemOneRequest)} and occupies one executor thread until
+	 * it finishes; the future fails with the exception {@code systemOne} would throw,
+	 * wrapped in a {@link java.util.concurrent.CompletionException}. A rejected
+	 * submission fails the returned future rather than throwing.
+	 * @param request the request
+	 * @param executor the executor that runs the call
+	 * @return a future for the answers
+	 */
+	public CompletableFuture<SystemOneResponse> systemOneAsync(SystemOneRequest request, Executor executor) {
+		Assert.notNull(request, "request must not be null");
+		Assert.notNull(executor, "executor must not be null");
+		try {
+			return CompletableFuture.supplyAsync(() -> systemOne(request), executor);
+		}
+		catch (RuntimeException ex) {
+			return CompletableFuture.failedFuture(ex);
+		}
+	}
+
+	/**
 	 * Answers several independent requests concurrently, four at a time.
 	 * @param requests the requests
 	 * @return one result per request, in the order submitted
