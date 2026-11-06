@@ -48,7 +48,9 @@ import tools.jackson.databind.json.JsonMapper;
  * All three are normalised onto this record: {@link #message()} always carries something
  * human-readable, {@link #errorType()} is set only by the object form, and
  * {@link #validationErrors()} is populated only by the array form. A compatible server's
- * {@code {"error":"..."}} body, as Ollama sends it, is read like the string form.
+ * {@code {"error":"..."}} body, as Ollama sends it, is read like the string form, and
+ * Drex's {@code {"error":{"type":"...","message":"...","issues":[...]}}} envelope like the
+ * object form, with each issue's {@code path} and {@code message} as a validation error.
  *
  * <p>
  * This is a best-effort reading of the body. The raw text always remains available as
@@ -102,7 +104,7 @@ public record TypeSafeErrorDetail(@Nullable String errorType, @Nullable String m
 	 * Reads the {@code detail} out of a raw error body.
 	 * @param body the raw response body, or {@code null}
 	 * @return the parsed detail, or {@code null} when the body was absent, empty, not JSON,
-	 * or carried neither a {@code detail} field nor a string {@code error} field
+	 * or carried neither a {@code detail} field nor an {@code error} field
 	 */
 	public static @Nullable TypeSafeErrorDetail parse(@Nullable String body) {
 		if (body == null || body.isBlank()) {
@@ -119,10 +121,7 @@ public record TypeSafeErrorDetail(@Nullable String errorType, @Nullable String m
 		}
 		JsonNode detail = root.get("detail");
 		if (detail == null || detail.isNull()) {
-			// Ollama, serving the same protocol, reports errors as {"error": "..."}.
-			JsonNode error = root.get("error");
-			return (error != null && error.isString()) ? new TypeSafeErrorDetail(null, error.stringValue(), List.of())
-					: null;
+			return parseError(root.get("error"));
 		}
 		if (detail.isString()) {
 			return new TypeSafeErrorDetail(null, detail.stringValue(), List.of());
@@ -136,6 +135,34 @@ public record TypeSafeErrorDetail(@Nullable String errorType, @Nullable String m
 		}
 		if (detail.isObject()) {
 			return new TypeSafeErrorDetail(text(detail, "error_type"), text(detail, "message"), List.of());
+		}
+		return null;
+	}
+
+	/**
+	 * Reads the {@code error} field of a compatible server that does not use the
+	 * {@code detail} envelope: Ollama's {@code {"error": "..."}} string, or Drex's
+	 * {@code {"error": {"type", "message", "issues"}}} object.
+	 */
+	private static @Nullable TypeSafeErrorDetail parseError(@Nullable JsonNode error) {
+		if (error == null || error.isNull()) {
+			return null;
+		}
+		if (error.isString()) {
+			return new TypeSafeErrorDetail(null, error.stringValue(), List.of());
+		}
+		if (error.isObject()) {
+			List<ValidationError> issues = new ArrayList<>();
+			JsonNode issuesNode = error.get("issues");
+			if (issuesNode != null && issuesNode.isArray()) {
+				for (JsonNode issue : issuesNode) {
+					String path = text(issue, "path");
+					List<String> loc = (path == null || path.isEmpty()) ? List.of() : List.of(path.split("\\."));
+					issues.add(new ValidationError(null, loc, text(issue, "message")));
+				}
+			}
+			return new TypeSafeErrorDetail(text(error, "type"), text(error, "message"),
+					Collections.unmodifiableList(issues));
 		}
 		return null;
 	}

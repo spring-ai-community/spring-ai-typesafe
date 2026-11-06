@@ -66,6 +66,8 @@ The table describes the hosted API. A compatible server may send another shape: 
 a plain string for every status ([Laya](Laya.md#what-differs)), or `{"error": "..."}`
 ([Ollama](Ollama.md#what-differs)). The status still maps to the right exception and
 `errorMessage()` is set, but `errorType()` can be `null` and `validationErrors()` empty.
+Drex's `{"error": {"type", "message", "issues"}}` envelope ([Drex](Drex.md#what-differs)) is
+read in full: `errorType()`, `errorMessage()`, and a 422's `issues` as `validationErrors()`.
 
 ```java
 catch (TypeSafeApiException ex) {

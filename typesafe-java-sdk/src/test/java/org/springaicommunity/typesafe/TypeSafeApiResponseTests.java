@@ -110,6 +110,37 @@ class TypeSafeApiResponseTests {
 	}
 
 	@Test
+	void parsesAScoreLegendSentAsAnArray() {
+		// Drex (console.nace.ai) sends the legend as an array of labels in level order,
+		// where Jev sends an object keyed by level. Captured from drex-max.
+		ScoreAnswer urgency = evaluate("""
+				{
+				  "model":"drex-max",
+				  "answers": {
+				    "is_urgent": { "type": "noul", "noul": 0.92 },
+				    "urgency": {
+				      "type": "score",
+				      "score": 1.13,
+				      "legend": ["Low", "Medium", "High"],
+				      "probabilities": { "0": 0.06, "1": 0.75, "2": 0.19 },
+				      "confidence": 0.62
+				    }
+				  },
+				  "usage": { "input_tokens": 301, "output_tokens": 305 },
+				  "evaluation_time_ms": 95.2,
+				  "request_id": "req_1c063bfbaa76c8511c005a65d6ab83d9"
+				}""").score("urgency");
+
+		assertThat(urgency.value()).isEqualTo(1.13);
+		assertThat(urgency.legend()).containsOnlyKeys(0, 1, 2);
+		assertThat(urgency.labelOf(0)).isNotNull();
+		assertThat(urgency.labelOf(0).asText()).isEqualTo("Low");
+		assertThat(urgency.nearestLevel()).isEqualTo(1);
+		assertThat(urgency.nearestLabel()).isEqualTo("Medium");
+		assertThat(urgency.maxLevel()).isEqualTo(2);
+	}
+
+	@Test
 	void reportsUsageAndModel() {
 		SystemOneResponse response = evaluate(DOCUMENTED_BODY);
 

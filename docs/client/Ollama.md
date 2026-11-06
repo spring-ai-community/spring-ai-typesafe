@@ -120,6 +120,7 @@ model, which Ollama does not have. So they don't run against Ollama as they are.
 ## See Also
 
 - [Using Laya](Laya.md): another local, open-source System One server
+- [Using Drex](Drex.md): a hosted System One API
 - [TypeSafeClient](TypeSafeClient.md): builder settings and environment variables
 - [Spring Boot Starter](SpringBootStarter.md): properties
 - [Demos](../demos.md#ollamasystemonedemoapplication): the Ollama demo

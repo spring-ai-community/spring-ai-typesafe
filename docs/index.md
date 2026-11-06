@@ -163,6 +163,7 @@ is set — see [Spring Boot Starter](client/SpringBootStarter.md).
 | Score many items at once | [Batches](client/Batches.md) |
 | See it all working | [Demos](demos.md) |
 | Run without an API key, or offline | [Using Ollama](client/Ollama.md) or [Using Laya](client/Laya.md) |
+| Run against another hosted System One API | [Using Drex](client/Drex.md) |
 
 ## Requirements
 
@@ -170,7 +171,7 @@ is set — see [Spring Boot Starter](client/SpringBootStarter.md).
 - Spring Boot 4.x (for the starter)
 - Spring AI 2.0.1 or later (for `typesafe-spring-ai`)
 - Maven 3.6+
-- A TypeSafe API key, or a compatible local server such as [Ollama](client/Ollama.md) or [Laya](client/Laya.md)
+- A TypeSafe API key, a compatible local server such as [Ollama](client/Ollama.md) or [Laya](client/Laya.md), or a key for a hosted one such as [Drex](client/Drex.md)
 
 ## Building
 

@@ -128,7 +128,9 @@ impossible temperature. On Laya, check such things in code instead, with a
 
 Laya is not the only local option. Ollama 0.35 and later serve Jev-style decision models
 (`nimble`, `tev1`) on the same `/v1/systemone` protocol; see [Using Ollama](Ollama.md). Its
-`nimble` model is much stronger than Laya on criteria that need world knowledge.
+`nimble` model is much stronger than Laya on criteria that need world knowledge. Hosted,
+nace.ai's Drex models serve the same protocol at `https://console.nace.ai`; see
+[Using Drex](Drex.md).
 
 ## Integration tests against Laya
 

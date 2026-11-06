@@ -189,6 +189,32 @@ class TypeSafeErrorMappingTests {
 	}
 
 	@Test
+	void readsADrexStyleErrorEnvelope() {
+		// Drex (console.nace.ai) wraps every error as {"error": {"type", "message", "issues"}}.
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
+			.andRespond(MockTypeSafeServer.errorResponse(422, """
+					{"error":{"type":"invalid_request_error",
+					"message":"questions.probe.instructions: must be a string",
+					"issues":[{"path":"questions.probe.instructions","message":"must be a string"}]},
+					"request_id":"req_0123456789abcdef0123456789abcdef"}"""));
+
+		assertThatExceptionOfType(TypeSafeUnprocessableEntityException.class).isThrownBy(this::evaluate)
+			.satisfies(ex -> {
+				assertThat(ex.errorType()).isEqualTo("invalid_request_error");
+				assertThat(ex.errorMessage()).isEqualTo("questions.probe.instructions: must be a string");
+				assertThat(ex.validationErrors()).singleElement().satisfies(error -> {
+					assertThat(error.type()).isNull();
+					assertThat(error.loc()).containsExactly("questions", "probe", "instructions");
+					assertThat(error.msg()).isEqualTo("must be a string");
+					assertThat(error.path()).isEqualTo("questions.probe.instructions");
+				});
+				assertThat(ex.getMessage()).endsWith("must be a string [invalid_request_error]")
+					.doesNotContain("{\"error\"");
+			});
+	}
+
+	@Test
 	void fallsBackToTheRawBodyWhenItIsNotADetailEnvelope() {
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))

@@ -27,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 import org.springaicommunity.typesafe.JsonContent;
 import org.springaicommunity.typesafe.question.Score;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
  * The answer to a {@link Score}: a probability-weighted value across the rubric levels,
@@ -39,14 +40,15 @@ import org.springaicommunity.typesafe.question.Score;
  * rounding to either.
  *
  * @param value the probability-weighted score
- * @param legend the description of each level, keyed by level index
+ * @param legend the description of each level, keyed by level index, whether the server
+ * sent it as an object keyed by level (Jev) or as an array in level order (Drex)
  * @param probabilities the probability of each level, keyed by level index
  * @param confidence how concentrated the distribution is, between {@code 0} and {@code 1}
  * @author Christian Tzolov
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ScoreAnswer(@JsonProperty("score") double value,
-		@JsonProperty("legend") Map<Integer, JsonContent> legend,
+		@JsonProperty("legend") @JsonDeserialize(using = LegendDeserializer.class) Map<Integer, JsonContent> legend,
 		@JsonProperty("probabilities") Map<Integer, Double> probabilities,
 		@JsonProperty("confidence") double confidence) implements Answer {
 
