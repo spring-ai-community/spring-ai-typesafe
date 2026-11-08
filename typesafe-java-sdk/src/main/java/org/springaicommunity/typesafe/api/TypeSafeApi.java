@@ -121,6 +121,20 @@ public class TypeSafeApi {
 	}
 
 	/**
+	 * @return the model listing path in use, relative to the API root
+	 */
+	public String getModelsPath() {
+		return modelsPath;
+	}
+
+	/**
+	 * @return the evaluation endpoint path in use, relative to the API root
+	 */
+	public String getSystemOnePath() {
+		return systemOnePath;
+	}
+
+	/**
 	 * Answers the request's questions against its state.
 	 * @param request the request body
 	 * @return the response entity, including the headers that carry the request id

@@ -18,6 +18,8 @@ package org.springaicommunity.typesafe;
 
 
 
+import org.springaicommunity.typesafe.api.TypeSafeApi;
+
 import java.time.Duration;
 
 /**
@@ -46,6 +48,12 @@ public final class TypeSafeConstants {
 
 	/** Timeout applied to each HTTP operation when the SDK builds its own transport. */
 	public static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
+
+	/** Default System One path, relative to the API root. */
+	public static final String DEFAULT_SYSTEM_ONE_PATH = TypeSafeApi.DEFAULT_SYSTEM_ONE_PATH;
+
+	/** Default model listing path, relative to the API root. */
+	public static final String DEFAULT_MODELS_PATH = TypeSafeApi.DEFAULT_MODELS_PATH;
 
 	private TypeSafeConstants() {
 	}

@@ -49,6 +49,10 @@ class TypeSafeApiRequestTests {
 	private static final String OK_BODY = """
 			{"model":"jev-1.13.0","answers":{"probe":{"type":"noul","noul":0.5}},"usage":{}}""";
 
+	private static final String LIST_MODELS_BODY = """
+			{"models":[{"name":"jev-latest","description":"The latest iteration of TypeSafe's System One Model: Jev","release_date":"2026-09-10T18:38:01.391457+00:00"},
+				{"name":"jev-preview","description":"A preview version of `jev-latest`: should be better in most ways","release_date":"2026-09-10T18:39:06.057655+00:00"}]}""";
+
 	private final MockTypeSafeServer mock = MockTypeSafeServer.create();
 
 	@Test
@@ -272,9 +276,7 @@ class TypeSafeApiRequestTests {
 			.expect(requestTo(MockTypeSafeServer.MODELS_URL))
 			.andExpect(method(org.springframework.http.HttpMethod.GET))
 			.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-api-key"))
-			.andRespond(MockTypeSafeServer.jsonResponse("""
-					{"models":[{"name":"jev-latest","description":"The latest iteration of TypeSafe's System One Model: Jev","release_date":"2026-09-10T18:38:01.391457+00:00"},
-					           {"name":"jev-preview","description":"A preview version of `jev-latest`: should be better in most ways","release_date":"2026-09-10T18:39:06.057655+00:00"}]}"""));
+			.andRespond(MockTypeSafeServer.jsonResponse(LIST_MODELS_BODY));
 
 		assertThat(this.mock.client().listModels()).extracting("name")
 			.containsExactly("jev-latest", "jev-preview");
@@ -352,6 +354,53 @@ class TypeSafeApiRequestTests {
 		second.set("X-Late", "too-late");
 
 		client.systemOne("anything", Map.of("probe", Noul.of("Is this a probe?")));
+
+		this.mock.server().verify();
+	}
+
+	@Test
+	void postsToTheConfiguredSystemOnePath() {
+		String path = "/api/v2/evaluate";
+
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.BASE_URL + path))
+			.andExpect(method(org.springframework.http.HttpMethod.POST))
+			.andRespond(MockTypeSafeServer.jsonResponse(OK_BODY));
+
+		this.mock.clientBuilder().systemOnePath(path).build()
+			.systemOne("anything", Map.of("probe", Noul.of("Is this a probe?")));
+
+		this.mock.server().verify();
+	}
+
+	@Test
+	void listsModelsFromTheConfiguredModelsPath() {
+		String path = "/api/v2/models";
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.BASE_URL + path))
+			.andExpect(method(org.springframework.http.HttpMethod.GET))
+			.andRespond(MockTypeSafeServer.jsonResponse(LIST_MODELS_BODY));
+
+		assertThat(this.mock.clientBuilder().modelsPath(path).build().listModels())
+			.extracting("name")
+			.containsExactly("jev-latest", "jev-preview");
+
+		this.mock.server().verify();
+	}
+
+	@Test
+	void configuresTheTwoPathsIndependently() {
+		String path = "/api/v2/evaluate";
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.BASE_URL + path))
+			.andRespond(MockTypeSafeServer.jsonResponse(OK_BODY));
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.MODELS_URL))
+			.andRespond(MockTypeSafeServer.jsonResponse(LIST_MODELS_BODY));
+
+		TypeSafeClient client = this.mock.clientBuilder().systemOnePath(path).build();
+		client.systemOne("anything", Map.of("probe", Noul.of("Is this a probe?")));
+		client.listModels();
 
 		this.mock.server().verify();
 	}
