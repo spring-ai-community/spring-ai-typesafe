@@ -1,5 +1,38 @@
 # Changes
 
+## 0.5.0
+
+The two API paths are now configurable, for an API that serves its endpoints
+somewhere other than the documented paths, and request bodies can be buffered
+so that a POST carries a `Content-Length` where the default transport would
+stream it chunked.
+
+### New
+
+- **Custom endpoint paths:** `systemOnePath(...)` and `modelsPath(...)` on the
+  client builder, `spring.ai.typesafe.system-one-path` and
+  `spring.ai.typesafe.models-path` under Boot, and the defaults published as
+  `TypeSafeConstants.DEFAULT_SYSTEM_ONE_PATH` and `DEFAULT_MODELS_PATH`.
+  Failure messages and `TypeSafeApiException.endpoint()` name the path
+  actually called, so a client on a non-default path blames the right
+  endpoint. See [Endpoint paths](client/TypeSafeClient.md#endpoint-paths).
+- **Buffered content:** `bufferContent(true)` and
+  `spring.ai.typesafe.buffer-content` wrap the transport in
+  `BufferingClientHttpRequestFactory`. The default JDK transport streams
+  the POST body, so it carries no `Content-Length`. Buffering assembles
+  the body first so the request declares its length, which some APIs
+  require. Off by default, because the streaming default is cheaper. See
+  [Buffering](client/TypeSafeClient.md#buffering) and
+  [Properties](client/SpringBootStarter.md#properties).
+
+### Changed
+
+- **`TypeSafeEndpoints` reports the configured paths.** It used to publish
+  the SDK defaults whatever the application asked for, which made it wrong
+  for any client not on the default paths. If you read it to learn what the
+  client is really calling, this is the fix you wanted. If you read it as a
+  constant, it now changes when you change the properties.
+
 ## 0.4.0
 
 The SDK runs against a local [Ollama](client/Ollama.md), and tool search stops padding its

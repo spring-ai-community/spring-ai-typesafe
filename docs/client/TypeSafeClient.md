@@ -50,6 +50,9 @@ TypeSafeClient client = TypeSafeClient.builder()
 | `timeout(Duration)` | `Duration` | `10s` | Per-attempt HTTP timeout. Also counted against the retry budget — see [Errors and Retries](ErrorsAndRetries.md). |
 | `retryPolicy(RetryPolicy)` | `RetryPolicy` | `RetryPolicy.defaults()` | Which failures are repeated and how often. |
 | `headers(HttpHeaders)` | `HttpHeaders` | empty | Extra headers on every request. **Adds** — call it twice and both sets are sent. |
+| `systemOnePath(String)` | `String` | `/v1/systemone` | Evaluation endpoint path, relative to the base URL. See [Endpoint paths](#endpoint-paths). |
+| `modelsPath(String)` | `String` | `/v1/models` | Model listing endpoint path, relative to the base URL. See [Endpoint paths](#endpoint-paths). |
+| `bufferContent(boolean)` | `boolean` | `false` | Buffer request and response bodies in memory. See [Buffering](#buffering). |
 | `restClientBuilder(RestClient.Builder)` | `RestClient.Builder` | — | Supply the transport yourself, keeping control of timeouts, interceptors and observability. |
 | `typeSafeApi(TypeSafeApi)` | `TypeSafeApi` | — | Supply a fully assembled transport layer. |
 
@@ -57,6 +60,40 @@ TypeSafeClient client = TypeSafeClient.builder()
     `Authorization`, `Content-Type` and `Accept` are set by the SDK after your headers are
     applied, so supplying your own value for any of the three replaces it rather than
     sending both.
+
+### Endpoint paths
+
+Both paths are relative to the base URL, and both defaults are published as
+`TypeSafeConstants.DEFAULT_SYSTEM_ONE_PATH` and `TypeSafeConstants.DEFAULT_MODELS_PATH`.
+Name them when the API you call serves these endpoints somewhere other than the documented
+paths. It could be a differently versioned API, a proxy in front of it, or a server that
+keeps its own scheme:
+
+```java
+TypeSafeClient client = TypeSafeClient.builder()
+        .apiKey(System.getenv(TypeSafeConstants.API_KEY_ENV))
+        .baseUrl("https://jev.internal.example")
+        .systemOnePath("/api/v2/evaluate")
+        .modelsPath("/api/v2/models")
+        .build();
+```
+
+Failure messages and `TypeSafeApiException.endpoint()` report the path actually called, so a
+client on a non-default path blames the right endpoint.
+
+### Buffering
+
+The default JDK transport streams the request body, so a POST goes out with
+`Transfer-Encoding: chunked` and **no `Content-Length`**. Some APIs, and the proxies in
+front of them, refuse a POST that does not declare its length. `bufferContent(true)` wraps
+the transport in `BufferingClientHttpRequestFactory`: the body is assembled in memory, its
+length becomes known, and the request carries `Content-Length`. Response bodies are buffered
+too, so an interceptor that reads one leaves the client one to decode.
+
+It applies only to the transport the client builds for itself. A transport supplied through
+`restClientBuilder(...)` keeps its own request factory and ignores this setting. Wrap that
+factory in `BufferingClientHttpRequestFactory` yourself. Leave it off otherwise: buffering
+copies every body, and the streaming default is the cheaper one.
 
 ## Asking questions
 

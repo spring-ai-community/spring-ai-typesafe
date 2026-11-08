@@ -51,6 +51,8 @@ import org.springaicommunity.typesafe.response.SystemOneResponse;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -91,6 +93,10 @@ public class TypeSafeClient {
 
 	private static final Logger logger = LoggerFactory.getLogger(TypeSafeClient.class);
 
+	private static final String SYSTEM_ONE_ENDPOINT = "POST %s";
+
+	private static final String MODELS_ENDPOINT = "GET %s";
+
 	private final TypeSafeApi typeSafeApi;
 
 	private final String defaultModel;
@@ -98,6 +104,10 @@ public class TypeSafeClient {
 	private final RetryPolicy retryPolicy;
 
 	private final @Nullable Duration perAttemptTimeout;
+
+	private final String systemOneEndpoint;
+
+	private final String modelsEndpoint;
 
 	/**
 	 * Creates a client over an API instance whose per-attempt timeout is not known. The
@@ -128,6 +138,8 @@ public class TypeSafeClient {
 		this.defaultModel = defaultModel;
 		this.retryPolicy = retryPolicy;
 		this.perAttemptTimeout = perAttemptTimeout;
+		this.systemOneEndpoint = String.format(SYSTEM_ONE_ENDPOINT, this.typeSafeApi.getSystemOnePath());
+		this.modelsEndpoint = String.format(MODELS_ENDPOINT, this.typeSafeApi.getModelsPath());
 		warnWhenNoRetryCanFit(retryPolicy, perAttemptTimeout);
 	}
 
@@ -205,16 +217,16 @@ public class TypeSafeClient {
 		SystemOneRequest effective = StringUtils.hasText(request.model()) ? request
 				: request.withModel(this.defaultModel);
 
-		return execute("POST /v1/systemone", () -> {
+		return execute(systemOneEndpoint, () -> {
 			ResponseEntity<SystemOneResponse> entity = this.typeSafeApi.systemOne(effective);
 			SystemOneResponse body = entity.getBody();
 			if (body == null) {
 				throw new TypeSafeApiResponseValidationException("The evaluation response had no body",
-						entity.getStatusCode().value(), null, entity.getHeaders(), "POST /v1/systemone", null);
+						entity.getStatusCode().value(), null, entity.getHeaders(), systemOneEndpoint, null);
 			}
 			if (body.answers().isEmpty()) {
 				throw new TypeSafeApiResponseValidationException("The evaluation response carried no answers",
-						entity.getStatusCode().value(), null, entity.getHeaders(), "POST /v1/systemone", "answers");
+						entity.getStatusCode().value(), null, entity.getHeaders(), systemOneEndpoint, "answers");
 			}
 			return body.withRequestId(entity.getHeaders().getFirst(TypeSafeApiException.REQUEST_ID_HEADER));
 		});
@@ -331,12 +343,12 @@ public class TypeSafeClient {
 	 * @return the models, never {@code null}
 	 */
 	public List<ModelMetadata> listModels() {
-		return execute("GET /v1/models", () -> {
+		return execute(modelsEndpoint, () -> {
 			ResponseEntity<ListModelsResponse> entity = this.typeSafeApi.listModels();
 			ListModelsResponse body = entity.getBody();
 			if (body == null) {
 				throw new TypeSafeApiResponseValidationException("The model listing response had no body",
-						entity.getStatusCode().value(), null, entity.getHeaders(), "GET /v1/models", null);
+						entity.getStatusCode().value(), null, entity.getHeaders(), modelsEndpoint, null);
 			}
 			return body.models();
 		});
@@ -479,6 +491,12 @@ public class TypeSafeClient {
 		/** {@code null} until declared; see {@link #timeout(Duration)}. */
 		private @Nullable Duration timeout;
 
+		private @Nullable String systemOnePath;
+
+		private @Nullable String modelsPath;
+
+		private boolean bufferContent = false;
+
 		private RetryPolicy retryPolicy = RetryPolicy.defaults();
 
 		private HttpHeaders headers = new HttpHeaders();
@@ -558,6 +576,50 @@ public class TypeSafeClient {
 		}
 
 		/**
+		 * Sets the path of the evaluation endpoint, relative to the base URL, for an API
+		 * that does not serve it at {@link TypeSafeApi#DEFAULT_SYSTEM_ONE_PATH}. The
+		 * configured path is also what failure messages and
+		 * {@link org.springaicommunity.typesafe.exception.TypeSafeApiException#endpoint()}
+		 * report.
+		 * @param systemOnePath the evaluation endpoint path, e.g. {@code /api/v2/evaluate}
+		 * @return this builder
+		 */
+		public Builder systemOnePath(String systemOnePath) {
+			Assert.hasText(systemOnePath, "systemOnePath must not be empty");
+			this.systemOnePath = systemOnePath;
+			return this;
+		}
+
+		/**
+		 * Sets the path of the model listing endpoint, relative to the base URL.
+		 * @param modelsPath the model listing endpoint path, e.g. {@code /api/v2/models}
+		 * @return this builder
+		 */
+		public Builder modelsPath(String modelsPath) {
+			Assert.hasText(modelsPath, "modelsPath must not be empty");
+			this.modelsPath = modelsPath;
+			return this;
+		}
+
+		/**
+		 * Buffers request bodies in memory before sending, so the request carries a
+		 * {@code Content-Length} header instead of chunked transfer encoding. The default
+		 * JDK transport streams the body without declaring its length, which some APIs
+		 * refuse on a POST. Response bodies are buffered too, which lets an
+		 * interceptor read one and still leave it for the client to decode. Applies only to
+		 * the transport this builder creates. A transport from
+		 * {@link #restClientBuilder(RestClient.Builder)} keeps its own request factory and
+		 * ignores this setting, so wrap that factory in
+		 * {@link BufferingClientHttpRequestFactory} instead.
+		 * @param bufferContent whether to buffer the content
+		 * @return this builder
+		 */
+		public Builder bufferContent(boolean bufferContent) {
+			this.bufferContent = bufferContent;
+			return this;
+		}
+
+		/**
 		 * Supplies the transport. The builder is cloned rather than mutated, and its
 		 * request factory is left untouched, so a caller keeps full control of timeouts,
 		 * interceptors and observability. This is also the hook a test uses to bind a
@@ -609,8 +671,7 @@ public class TypeSafeClient {
 			RestClient.Builder transport = this.restClientBuilder;
 			if (transport == null) {
 				perAttemptTimeout = (this.timeout != null) ? this.timeout : TypeSafeConstants.DEFAULT_TIMEOUT;
-				JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
-				requestFactory.setReadTimeout(perAttemptTimeout);
+				ClientHttpRequestFactory requestFactory = makeDefaultClientHttpRequestFactory(perAttemptTimeout);
 				transport = RestClient.builder().requestFactory(requestFactory);
 			}
 
@@ -618,9 +679,14 @@ public class TypeSafeClient {
 			HttpHeaders headersCopy = new HttpHeaders();
 			headersCopy.addAll(this.headers);
 
+			String systemOnePath = firstNonBlank(this.systemOnePath, TypeSafeApi.DEFAULT_SYSTEM_ONE_PATH);
+			String modelsPath = firstNonBlank(this.modelsPath, TypeSafeApi.DEFAULT_MODELS_PATH);
+
 			TypeSafeApi api = TypeSafeApi.builder()
 				.baseUrl(url)
 				.apiKey(key)
+				.systemOnePath(systemOnePath)
+				.modelsPath(modelsPath)
 				.headers(headersCopy)
 				.restClientBuilder(transport)
 				.build();
@@ -637,5 +703,10 @@ public class TypeSafeClient {
 			throw new IllegalStateException("No non-blank candidate available");
 		}
 
+		private ClientHttpRequestFactory makeDefaultClientHttpRequestFactory(Duration timeout) {
+			JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
+			requestFactory.setReadTimeout(timeout);
+			return bufferContent ? new BufferingClientHttpRequestFactory(requestFactory) : requestFactory;
+		}
 	}
 }

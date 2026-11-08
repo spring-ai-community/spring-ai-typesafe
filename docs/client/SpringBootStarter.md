@@ -36,6 +36,9 @@ spring.ai.typesafe.api-key=${TYPESAFE_API_KEY}
 spring.ai.typesafe.base-url=https://api.typesafe.ai
 spring.ai.typesafe.model=jev-latest
 spring.ai.typesafe.timeout=10s
+spring.ai.typesafe.system-one-path=/v1/systemone
+spring.ai.typesafe.models-path=/v1/models
+spring.ai.typesafe.buffer-content=false
 spring.ai.typesafe.retry.max-retries=2
 spring.ai.typesafe.retry.initial-backoff=500ms
 spring.ai.typesafe.retry.max-backoff=5s
@@ -49,6 +52,9 @@ spring.ai.typesafe.retry.total-timeout=30s
 | `base-url` | `https://api.typesafe.ai` | The API base URL. |
 | `model` | `jev-latest` | Applied to requests that do not name a model. |
 | `timeout` | `10s` | Per-attempt HTTP timeout. |
+| `system-one-path` | `/v1/systemone` | Evaluation endpoint path, relative to `base-url`, for an API that serves it elsewhere. |
+| `models-path` | `/v1/models` | Model listing endpoint path, relative to `base-url`. |
+| `buffer-content` | `false` | Buffer request and response bodies in memory. Request buffering makes the POST carry `Content-Length` instead of chunked transfer encoding, which some APIs require. Costs a copy of every body, so leave it off unless something on the path needs the header. |
 | `retry.*` | see [Errors and Retries](ErrorsAndRetries.md) | Retry budget and backoff. |
 
 ## Conditional wiring
@@ -88,7 +94,8 @@ properties.
 
 The starter also contributes the API paths the client uses as a
 `TypeSafeAutoConfiguration.TypeSafeEndpoints` record, which is occasionally useful for
-observability or for building a health check:
+observability or for building a health check. It reflects the paths the client
+actually calls, so a health check probes the endpoints you pointed the client at:
 
 ```java
 @Bean

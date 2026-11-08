@@ -66,12 +66,18 @@ class TypeSafeAutoConfigurationTests {
 					"spring.ai.typesafe.retry.jitter=0.5", "spring.ai.typesafe.retry.statuses=408,429,409",
 					"spring.ai.typesafe.retry.respect-retry-after=false",
 					"spring.ai.typesafe.retry.retry-connection-errors=false",
-					"spring.ai.typesafe.retry.total-timeout=90s")
+					"spring.ai.typesafe.retry.total-timeout=90s",
+					"spring.ai.typesafe.system-one-path=/api/v2/evaluate",
+					"spring.ai.typesafe.models-path=/api/v2/models",
+					"spring.ai.typesafe.buffer-content=true")
 			.run(context -> {
 				TypeSafeProperties properties = context.getBean(TypeSafeProperties.class);
 				assertThat(properties.getBaseUrl()).isEqualTo("https://jev.internal.example");
 				assertThat(properties.getModel()).isEqualTo(TypeSafeModels.JEV_1_13_0);
 				assertThat(properties.getTimeout()).isEqualTo(Duration.ofSeconds(42));
+				assertThat(properties.getSystemOnePath()).isEqualTo("/api/v2/evaluate");
+				assertThat(properties.getModelsPath()).isEqualTo("/api/v2/models");
+				assertThat(properties.isBufferContent()).isTrue();
 
 				RetryPolicy policy = context.getBean(TypeSafeClient.class).retryPolicy();
 				assertThat(policy.maxRetries()).isEqualTo(7);
@@ -110,6 +116,33 @@ class TypeSafeAutoConfigurationTests {
 			TypeSafeAutoConfiguration.TypeSafeEndpoints endpoints = context.getBean(TypeSafeAutoConfiguration.TypeSafeEndpoints.class);
 			assertThat(endpoints.systemOnePath()).isEqualTo(TypeSafeApi.DEFAULT_SYSTEM_ONE_PATH);
 			assertThat(endpoints.modelsPath()).isEqualTo(TypeSafeApi.DEFAULT_MODELS_PATH);
+		});
+	}
+
+	@Test
+	void exposesTheConfiguredEndpointPathsRatherThanTheSdkDefaults() {
+		this.contextRunner
+			.withPropertyValues("spring.ai.typesafe.api-key=test-api-key",
+					"spring.ai.typesafe.system-one-path=/api/v2/evaluate",
+					"spring.ai.typesafe.models-path=/api/v2/models")
+			.run(context -> {
+				TypeSafeAutoConfiguration.TypeSafeEndpoints endpoints = context
+					.getBean(TypeSafeAutoConfiguration.TypeSafeEndpoints.class);
+				assertThat(endpoints.systemOnePath()).isEqualTo("/api/v2/evaluate");
+				assertThat(endpoints.modelsPath()).isEqualTo("/api/v2/models");
+			});
+	}
+
+	@Test
+	void leavesTheEndpointPathsAndTheBufferingAtTheirDefaults() {
+		this.contextRunner.withPropertyValues(
+				"spring.ai.typesafe.api-key=test-api-key"
+		).run(context -> {
+			TypeSafeProperties properties = context.getBean(TypeSafeProperties.class);
+			assertThat(properties.getSystemOnePath()).isEqualTo(TypeSafeApi.DEFAULT_SYSTEM_ONE_PATH);
+			assertThat(properties.getModelsPath()).isEqualTo(TypeSafeApi.DEFAULT_MODELS_PATH);
+			// Buffering costs a copy of every body, so it stays off unless asked for.
+			assertThat(properties.isBufferContent()).isFalse();
 		});
 	}
 

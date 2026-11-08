@@ -64,6 +64,23 @@ public class TypeSafeProperties {
 	 */
 	private Duration timeout = TypeSafeConstants.DEFAULT_TIMEOUT;
 
+	/**
+	 * Path of the evaluation endpoint, relative to the API root.
+	 */
+	private String systemOnePath = TypeSafeConstants.DEFAULT_SYSTEM_ONE_PATH;
+
+	/**
+	 * Path of the model listing endpoint, relative to the API root.
+	 */
+	private String modelsPath = TypeSafeConstants.DEFAULT_MODELS_PATH;
+
+	/**
+	 * Whether request and response bodies are buffered in memory. Request buffering is what
+	 * makes the POST carry {@code Content-Length} instead of chunked transfer encoding,
+	 * which some APIs require.
+	 */
+	private boolean bufferContent = false;
+
 	private final Retry retry = new Retry();
 
 	public @Nullable String getApiKey() {
@@ -96,6 +113,30 @@ public class TypeSafeProperties {
 
 	public void setTimeout(Duration timeout) {
 		this.timeout = timeout;
+	}
+
+	public String getSystemOnePath() {
+		return this.systemOnePath;
+	}
+
+	public void setSystemOnePath(String systemOnePath) {
+		this.systemOnePath = systemOnePath;
+	}
+
+	public String getModelsPath() {
+		return this.modelsPath;
+	}
+
+	public void setModelsPath(String modelsPath) {
+		this.modelsPath = modelsPath;
+	}
+
+	public boolean isBufferContent() {
+		return this.bufferContent;
+	}
+
+	public void setBufferContent(boolean bufferContent) {
+		this.bufferContent = bufferContent;
 	}
 
 	public Retry getRetry() {

@@ -18,9 +18,11 @@ package org.springaicommunity.typesafe;
 
 
 
+import java.io.IOException;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.springaicommunity.typesafe.exception.TypeSafeApiConnectionException;
 import org.springaicommunity.typesafe.exception.TypeSafeApiException;
 import org.springaicommunity.typesafe.exception.TypeSafeApiResponseValidationException;
 import org.springaicommunity.typesafe.exception.TypeSafeAuthenticationException;
@@ -276,6 +278,35 @@ class TypeSafeErrorMappingTests {
 			.satisfies(ex -> assertThat(ex).isNotInstanceOf(RestClientException.class));
 	}
 
+	@Test
+	void reportsTheConfiguredPathOnAResponseValidationFailure() {
+		// The endpoint carried by these exceptions is composed from the configured path, so
+		// a client aimed at a non-default path must not report an endpoint it never called.
+		String defaultPath = "/v1/systemone";
+		String path = "/api/v2/evaluate";
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.BASE_URL + path))
+			.andRespond(MockRestResponseCreators.withSuccess("<html>Service Unavailable</html>", MediaType.TEXT_HTML));
+
+		assertThatExceptionOfType(TypeSafeApiResponseValidationException.class)
+			.isThrownBy(this::evaluateConfiguredPath)
+			.satisfies(ex -> {
+				assertThat(ex.endpoint()).contains(path).doesNotContain(defaultPath);
+				assertThat(ex.getMessage()).contains("POST " + path);
+			});
+	}
+
+	@Test
+	void namesTheConfiguredPathWhenNoHttpResponseArrives() {
+		String path = "/api/v2/evaluate";
+		this.mock.server()
+			.expect(requestTo(MockTypeSafeServer.BASE_URL + path))
+			.andRespond(MockRestResponseCreators.withException(new IOException("connection refused")));
+
+		assertThatExceptionOfType(TypeSafeApiConnectionException.class).isThrownBy(this::evaluateConfiguredPath)
+			.satisfies(ex -> assertThat(ex.getMessage()).contains("Jev POST " + path + " failed"));
+	}
+
 	private org.assertj.core.api.AbstractThrowableAssert<?, ? extends Throwable> assertThatStatus(int status) {
 		this.mock.server()
 			.expect(requestTo(MockTypeSafeServer.SYSTEM_ONE_URL))
@@ -290,6 +321,19 @@ class TypeSafeErrorMappingTests {
 
 	private void evaluate(RetryPolicy retryPolicy) {
 		this.mock.client(retryPolicy).systemOne("anything", Map.of("probe", Noul.of("Is this a probe?")));
+	}
+
+	/**
+	 * Calls an evaluation path other than the default. No retry, so the failure under test
+	 * comes from the first attempt rather than being replayed against an unexpected
+	 * third expectation.
+	 */
+	private void evaluateConfiguredPath() {
+		this.mock.clientBuilder()
+			.systemOnePath("/api/v2/evaluate")
+			.retryPolicy(RetryPolicy.noRetry())
+			.build()
+			.systemOne("anything", Map.of("probe", Noul.of("Is this a probe?")));
 	}
 
 }

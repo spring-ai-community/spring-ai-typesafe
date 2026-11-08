@@ -19,7 +19,6 @@ package org.springaicommunity.typesafe.autoconfigure;
 
 
 import org.springaicommunity.typesafe.TypeSafeClient;
-import org.springaicommunity.typesafe.api.TypeSafeApi;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -28,6 +27,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -70,8 +71,13 @@ public class TypeSafeAutoConfiguration {
 		Assert.state(StringUtils.hasText(properties.getApiKey()),
 				() -> "No API key configured. Set " + TypeSafeProperties.CONFIG_PREFIX + ".api-key.");
 
-		JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory();
-		requestFactory.setReadTimeout(properties.getTimeout());
+		JdkClientHttpRequestFactory jdkClientHttpRequestFactory = new JdkClientHttpRequestFactory();
+		jdkClientHttpRequestFactory.setReadTimeout(properties.getTimeout());
+
+		ClientHttpRequestFactory requestFactory = jdkClientHttpRequestFactory;
+		if (properties.isBufferContent()) {
+			requestFactory = new BufferingClientHttpRequestFactory(jdkClientHttpRequestFactory);
+		}
 
 		// clone(), because the context's builder may be a singleton shared with other
 		// consumers; replacing its request factory in place would change their timeouts too.
@@ -83,6 +89,8 @@ public class TypeSafeAutoConfiguration {
 			.apiKey(properties.getApiKey())
 			.baseUrl(properties.getBaseUrl())
 			.defaultModel(properties.getModel())
+			.systemOnePath(properties.getSystemOnePath())
+			.modelsPath(properties.getModelsPath())
 			// Declared as well as applied to the transport: the client counts it against
 			// RetryPolicy.totalTimeout when deciding whether another attempt fits, so
 			// leaving it at the 10s default lets a call overrun its declared budget.
@@ -98,8 +106,8 @@ public class TypeSafeAutoConfiguration {
 	 */
 	@Bean
 	@ConditionalOnMissingBean
-	public TypeSafeEndpoints typeSafeEndpoints() {
-		return new TypeSafeEndpoints(TypeSafeApi.DEFAULT_SYSTEM_ONE_PATH, TypeSafeApi.DEFAULT_MODELS_PATH);
+	public TypeSafeEndpoints typeSafeEndpoints(TypeSafeProperties properties) {
+		return new TypeSafeEndpoints(properties.getSystemOnePath(), properties.getModelsPath());
 	}
 
 	/**
