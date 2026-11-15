@@ -1,5 +1,20 @@
 # Spring AI TypeSafe
 
+!!! warning "This project is archived and no longer maintained"
+
+    Its code moved to two places:
+
+    - **Spring AI 2.1** has its own [`DecisionModel` API](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision.html), with
+      [System One](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision/systemone-decision.html) as one of its providers. The
+      client, the Spring Boot starter, the RAG filter and reranker, and the tool index are
+      there now.
+    - **[Spring AI Decision Extensions](https://github.com/spring-ai-community/spring-ai-decision-extensions)** has the judge, the self-refine and
+      guardrail advisors, the decision patterns and the chat model adapter. They now work
+      with any `DecisionModel`, not only System One.
+
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest-snapshot/migration/).
+    The released versions, up to 0.4.0, stay available on Maven Central.
+
 A Java client for the [TypeSafe AI](https://docs.typesafe.ai/introduction) **System One** API
 (`jev`), plus a [Spring AI](https://docs.spring.io/spring-ai/reference/) integration that uses
 it for judging, guardrails, RAG triage and tool selection.
