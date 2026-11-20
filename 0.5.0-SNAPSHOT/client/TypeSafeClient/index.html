@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/logo2.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -90,9 +90,9 @@
             
             
 This project is archived. Its code moved to
-<a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision.html">Spring AI</a> and to
+<a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html">Spring AI</a> and to
 <a href="https://github.com/spring-ai-community/spring-ai-decision-extensions">Spring AI Decision Extensions</a>.
-See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest-snapshot/migration/">Coming from spring-ai-typesafe</a>.
+See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/">Coming from spring-ai-typesafe</a>.
 
           </div>
           
@@ -2012,6 +2012,11 @@ See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions
 
 
 <h1 id="typesafeclient">TypeSafeClient<a class="headerlink" href="#typesafeclient" title="Permanent link">&para;</a></h1>
+<div class="admonition warning">
+<p class="admonition-title">This project is archived</p>
+<p><code>TypeSafeClient</code> is now <code>SystemOneClient</code> in Spring AI, used behind <code>SystemOneDecisionModel</code>. See <a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html#low-level-api">Low-level SystemOneClient</a>.
+To move an application over, see <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went">Coming from spring-ai-typesafe</a>.</p>
+</div>
 <p>The entry point of the SDK. Wraps the HTTP transport with a default model, a retry policy
 and typed exceptions, and stitches the <code>x-typesafe-request-id</code> header onto the response so
 the id travels with the data it describes.</p>

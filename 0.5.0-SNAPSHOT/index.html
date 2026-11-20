@@ -19,7 +19,7 @@
       
       
       <link rel="icon" href="images/logo2.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -88,9 +88,9 @@
             
             
 This project is archived. Its code moved to
-<a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision.html">Spring AI</a> and to
+<a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html">Spring AI</a> and to
 <a href="https://github.com/spring-ai-community/spring-ai-decision-extensions">Spring AI Decision Extensions</a>.
-See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest-snapshot/migration/">Coming from spring-ai-typesafe</a>.
+See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/">Coming from spring-ai-typesafe</a>.
 
           </div>
           
@@ -1935,16 +1935,22 @@ See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions
 <p class="admonition-title">This project is archived and no longer maintained</p>
 <p>Its code moved to two places:</p>
 <ul>
-<li><strong>Spring AI 2.1</strong> has its own <a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision.html"><code>DecisionModel</code> API</a>, with
-  <a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision/systemone-decision.html">System One</a> as one of its providers. The
+<li><strong>Spring AI 2.1</strong> has its own <a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html"><code>DecisionModel</code> API</a>, with
+  <a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html">System One</a> as one of its providers. The
   client, the Spring Boot starter, the RAG filter and reranker, and the tool index are
   there now.</li>
 <li><strong><a href="https://github.com/spring-ai-community/spring-ai-decision-extensions">Spring AI Decision Extensions</a></strong> has the judge, the self-refine and
   guardrail advisors, the decision patterns and the chat model adapter. They now work
   with any <code>DecisionModel</code>, not only System One.</li>
 </ul>
-<p>To move an application over, see <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest-snapshot/migration/">Coming from spring-ai-typesafe</a>.
+<p>To move an application over, see <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/">Coming from spring-ai-typesafe</a>.
 The released versions, up to 0.4.0, stay available on Maven Central.</p>
+<p>The replacements are on Maven Central too:</p>
+<ul>
+<li>the extensions: import the <code>org.springaicommunity:spring-ai-decision-bom:0.5.0</code> BOM and add
+  the modules you use, such as <code>spring-ai-decision-judge</code>;</li>
+<li>System One: Spring AI's <code>org.springframework.ai:spring-ai-starter-model-systemone</code>.</li>
+</ul>
 </div>
 <p>A Java client for the <a href="https://docs.typesafe.ai/introduction">TypeSafe AI</a> <strong>System One</strong> API
 (<code>jev</code>), plus a <a href="https://docs.spring.io/spring-ai/reference/">Spring AI</a> integration that uses

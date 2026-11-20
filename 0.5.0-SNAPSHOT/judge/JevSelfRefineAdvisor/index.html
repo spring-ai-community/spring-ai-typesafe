@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/logo2.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
     
     
       
@@ -90,9 +90,9 @@
             
             
 This project is archived. Its code moved to
-<a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision.html">Spring AI</a> and to
+<a href="https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html">Spring AI</a> and to
 <a href="https://github.com/spring-ai-community/spring-ai-decision-extensions">Spring AI Decision Extensions</a>.
-See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest-snapshot/migration/">Coming from spring-ai-typesafe</a>.
+See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/">Coming from spring-ai-typesafe</a>.
 
           </div>
           
@@ -2022,6 +2022,11 @@ See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions
 
 
 <h1 id="jevselfrefineadvisor">JevSelfRefineAdvisor<a class="headerlink" href="#jevselfrefineadvisor" title="Permanent link">&para;</a></h1>
+<div class="admonition warning">
+<p class="admonition-title">This project is archived</p>
+<p><code>JevSelfRefineAdvisor</code> is now <code>DecisionSelfRefineAdvisor</code> in Spring AI Decision Extensions (<code>org.springaicommunity:spring-ai-decision-self-refine</code>), and works with any Spring AI <code>DecisionModel</code>. See <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/self-refine/DecisionSelfRefineAdvisor/">DecisionSelfRefineAdvisor</a>.
+To move an application over, see <a href="https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#what-behaves-differently">Coming from spring-ai-typesafe</a>.</p>
+</div>
 <p>A self-refine <code>CallAdvisor</code>: it judges every model response with <a href="../JevJudge/"><code>JevJudge</code></a>
 and, when the response falls short, feeds the defect back into the prompt and tries again.</p>
 <h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
