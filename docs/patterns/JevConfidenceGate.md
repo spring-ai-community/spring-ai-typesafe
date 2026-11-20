@@ -1,5 +1,10 @@
 # JevConfidenceGate
 
+!!! warning "This project is archived"
+
+    `JevConfidenceGate` is now `DecisionConfidenceGate` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-patterns`), and works with any Spring AI `DecisionModel`. See [DecisionConfidenceGate](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/patterns/DecisionConfidenceGate/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#what-behaves-differently).
+
 A reusable routing policy: a universal confidence floor, plus per-action thresholds for
 actions that cost more when they are wrong.
 

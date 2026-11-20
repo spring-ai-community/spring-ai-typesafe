@@ -1,5 +1,10 @@
 # JevDocumentFilter
 
+!!! warning "This project is archived"
+
+    `JevDocumentFilter` is now `DecisionDocumentFilter` in Spring AI. See [DecisionDocumentFilter](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/rag/modules.html#_decisiondocumentfilter) in the RAG docs.
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 A Spring AI `DocumentPostProcessor` that triages retrieved passages before they reach the
 prompt, asking four narrow questions about each one.
 

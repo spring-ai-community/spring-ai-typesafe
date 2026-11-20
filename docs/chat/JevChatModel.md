@@ -1,5 +1,10 @@
 # JevChatModel
 
+!!! warning "This project is archived"
+
+    `JevChatModel` is now `DecisionChatModel` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-chat`), and works with any Spring AI `DecisionModel`. See [DecisionChatModel](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/chat/DecisionChatModel/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#what-behaves-differently).
+
 A Jev **classifier** behind Spring AI's `ChatModel` interface, so a `ChatClient` can return
 typed classifications: which team, how urgent, how severe.
 

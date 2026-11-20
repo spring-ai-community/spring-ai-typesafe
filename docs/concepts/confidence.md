@@ -1,5 +1,10 @@
 # Confidence
 
+!!! warning "This project is archived"
+
+    Confidence is now part of Spring AI's Decision Models API: see [Probabilities and Confidence](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html#_probabilities_and_confidence). How the decision extensions act on it is in [Confidence](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/concepts/confidence/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#because-the-api-is-provider-neutral).
+
 Confidence is a second axis. **The answer tells you what; confidence tells you whether to
 act on it unattended.**
 

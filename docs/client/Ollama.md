@@ -1,5 +1,10 @@
 # Using Ollama
 
+!!! warning "This project is archived"
+
+    Spring AI has an [Ollama decision provider](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/ollama/decision.html), `OllamaDecisionModel`. The System One provider runs against Ollama too; see [Backends](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html#backends).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 [Ollama](https://ollama.com) 0.35 and later serve
 [Jev-style decision models](https://ollama.com/blog/ollama-now-supports-jev-style-decision-models)
 on the same `POST /v1/systemone` wire protocol as Jev. `TypeSafeClient`, and everything built

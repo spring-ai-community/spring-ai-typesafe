@@ -1,5 +1,10 @@
 # JevCompositeScore
 
+!!! warning "This project is archived"
+
+    `JevCompositeScore` is now `DecisionCompositeScore` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-patterns`), and works with any Spring AI `DecisionModel`. See [DecisionCompositeScore](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/patterns/DecisionCompositeScore/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#what-behaves-differently).
+
 Several score dimensions combined into one number with weights you control.
 
 !!! warning "For ordering, never for gating"

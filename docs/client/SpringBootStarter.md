@@ -1,5 +1,10 @@
 # Spring Boot Starter
 
+!!! warning "This project is archived"
+
+    The starter is now `spring-ai-starter-model-systemone` in Spring AI, configured with `spring.ai.systemone.*` properties. See [Auto-configuration](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html#auto-configuration).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 Auto-configures a `TypeSafeClient` bean from `spring.ai.typesafe.*` properties.
 
 ## Quick Start

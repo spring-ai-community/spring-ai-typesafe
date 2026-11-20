@@ -1,5 +1,10 @@
 # Using Laya
 
+!!! warning "This project is archived"
+
+    Spring AI's System One provider runs against Laya too. See [Backends](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html#backends).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 [Laya](https://github.com/NandhaKishorM/laya) is an open-source (Apache-2.0) System One
 engine. Its `laya-serve` server, added in Laya 0.3.7, exposes the same `POST /v1/systemone`
 wire protocol as Jev. That means `TypeSafeClient` and everything built on it can run against a

@@ -1,5 +1,10 @@
 # TypeSafeClient
 
+!!! warning "This project is archived"
+
+    `TypeSafeClient` is now `SystemOneClient` in Spring AI, used behind `SystemOneDecisionModel`. See [Low-level SystemOneClient](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html#low-level-api).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 The entry point of the SDK. Wraps the HTTP transport with a default model, a retry policy
 and typed exceptions, and stitches the `x-typesafe-request-id` header onto the response so
 the id travels with the data it describes.

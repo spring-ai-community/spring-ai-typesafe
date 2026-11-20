@@ -1,5 +1,10 @@
 # JevDocumentReranker
 
+!!! warning "This project is archived"
+
+    `JevDocumentReranker` is now `DecisionDocumentReranker` in Spring AI. See [DecisionDocumentReranker](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/rag/modules.html#_decisiondocumentreranker) in the RAG docs.
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 A Spring AI `DocumentPostProcessor` that reorders retrieved documents by asking, one
 document at a time, whether each could actually answer the query.
 

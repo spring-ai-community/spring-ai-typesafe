@@ -1,5 +1,10 @@
 # Changes
 
+!!! warning "This project is archived"
+
+    This changelog ends here, because the project is archived.
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 ## 0.4.0
 
 The SDK runs against a local [Ollama](client/Ollama.md), and tool search stops padding its

@@ -1,5 +1,10 @@
 # Batches
 
+!!! warning "This project is archived"
+
+    Spring AI's System One client has no batch API. To ask the same questions several times, use [`DecisionConsistency`](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/patterns/DecisionConsistency/) in Spring AI Decision Extensions, which runs the calls concurrently itself.
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#because-the-api-is-provider-neutral).
+
 `systemOneAll` answers several independent requests concurrently, with a bounded number in
 flight and one result per request.
 

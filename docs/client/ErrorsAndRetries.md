@@ -1,5 +1,10 @@
 # Errors and Retries
 
+!!! warning "This project is archived"
+
+    System One errors and retries are now in Spring AI. See [Errors](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html#_errors) and the `spring.ai.systemone.retry.*` [connection properties](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html#_connection_properties).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 Every failure arrives as a `TypeSafeException`, so a caller branches on the exception type
 rather than on a status code.
 

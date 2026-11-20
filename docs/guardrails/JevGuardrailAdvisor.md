@@ -1,5 +1,10 @@
 # JevGuardrailAdvisor
 
+!!! warning "This project is archived"
+
+    `JevGuardrailAdvisor` is now `DecisionGuardrailAdvisor` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-guardrail`), and works with any Spring AI `DecisionModel`. See [DecisionGuardrailAdvisor](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/guardrails/DecisionGuardrailAdvisor/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#what-behaves-differently).
+
 Screens what the user sends and what the model answers, refusing the turn when either
 crosses a line.
 

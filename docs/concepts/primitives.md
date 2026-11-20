@@ -1,5 +1,10 @@
 # The Three Primitives
 
+!!! warning "This project is archived"
+
+    `Noul`, `Choice` and `Score` are now `YesNoQuestion`, `ChoiceQuestion` and `ScoreQuestion` in Spring AI. See [Questions](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html#_questions) in the Decision Models API.
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 Every question you ask Jev is one of three shapes. Each answers differently, and each is
 thresholded differently — which is the whole reason to pick deliberately between them.
 

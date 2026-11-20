@@ -1,5 +1,10 @@
 # JevJudge
 
+!!! warning "This project is archived"
+
+    `JevJudge` is now `DecisionJudge` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-judge`), and works with any Spring AI `DecisionModel`. See [DecisionJudge](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/judge/DecisionJudge/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#the-api-side-by-side).
+
 A Model-as-a-judge built out of atomic questions rather than one rubric prompt. Every
 criterion is answered against the same state in a single call, in parallel, and each keeps
 its own threshold.

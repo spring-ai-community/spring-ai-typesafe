@@ -1,5 +1,10 @@
 # JevEvaluator
 
+!!! warning "This project is archived"
+
+    `JevEvaluator` is now `DecisionEvaluator` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-judge`), and works with any Spring AI `DecisionModel`. See [DecisionEvaluator](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/judge/DecisionEvaluator/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#the-api-side-by-side).
+
 A [`JevJudge`](JevJudge.md) behind Spring AI's `Evaluator` interface, so Jev drops into code
 already written against the framework's evaluation SPI.
 

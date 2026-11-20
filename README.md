@@ -3,16 +3,22 @@
 > [!IMPORTANT]
 > **This project is archived and no longer maintained.** Its code moved to two places:
 >
-> - **Spring AI 2.1** has its own [`DecisionModel` API](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision.html), with
->   [System One](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/api/decision/systemone-decision.html) as one of its providers. The client,
+> - **Spring AI 2.1** has its own [`DecisionModel` API](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html), with
+>   [System One](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/integrations/models/systemone.html) as one of its providers. The client,
 >   the Spring Boot starter, the RAG filter and reranker, and the tool index are there now.
 > - **[Spring AI Decision Extensions](https://github.com/spring-ai-community/spring-ai-decision-extensions)** has the judge, the self-refine and guardrail
 >   advisors, the decision patterns and the chat model adapter. They now work with any
 >   `DecisionModel`, not only System One.
 >
 > To move an application over, see
-> [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest-snapshot/migration/).
+> [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/).
 > The released versions, up to 0.4.0, stay available on Maven Central.
+>
+> The replacements are on Maven Central too:
+>
+> - the extensions: import the `org.springaicommunity:spring-ai-decision-bom:0.5.0` BOM and add the
+>   modules you use, such as `spring-ai-decision-judge`;
+> - System One: Spring AI's `org.springframework.ai:spring-ai-starter-model-systemone`.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Maven Central](https://img.shields.io/maven-central/v/org.springaicommunity/typesafe-java-sdk.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/org.springaicommunity/typesafe-java-sdk)

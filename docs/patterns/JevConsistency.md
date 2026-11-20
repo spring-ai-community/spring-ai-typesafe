@@ -1,5 +1,10 @@
 # JevConsistency
 
+!!! warning "This project is archived"
+
+    `JevConsistency` is now `DecisionConsistency` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-patterns`), and works with any Spring AI `DecisionModel`. See [DecisionConsistency](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/patterns/DecisionConsistency/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#what-behaves-differently).
+
 Asks the same questions repeatedly and reports how much the answers move.
 
 ## Why

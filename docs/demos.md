@@ -1,5 +1,10 @@
 # Demos
 
+!!! warning "This project is archived"
+
+    These demos run against the archived SDK. For the current API, start with the [Decision Models](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/models/decision.html) quick start in Spring AI and the [Spring AI Decision Extensions](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/) docs.
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 Eight runnable entry points in `examples`. Run `mvn install -DskipTests` from the reactor root
 first, so the other modules are resolvable; `spring-boot:run` is a single-module goal, so it
 takes `-pl examples` **without** `-am`.

@@ -1,5 +1,10 @@
 # JevToolIndex
 
+!!! warning "This project is archived"
+
+    `JevToolIndex` is now `DecisionToolIndex` in Spring AI. See [DecisionToolIndex](https://docs.spring.io/spring-ai/reference/2.1-SNAPSHOT/tools/tool-search.html#decision-tool-index) in the Tool Search docs.
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#where-everything-went).
+
 A Spring AI `ToolIndex` that picks tools by asking Jev, rather than by keyword or embedding
 proximity — and, unlike either, can report that **no** tool applies.
 

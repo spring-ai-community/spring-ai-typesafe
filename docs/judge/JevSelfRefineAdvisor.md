@@ -1,5 +1,10 @@
 # JevSelfRefineAdvisor
 
+!!! warning "This project is archived"
+
+    `JevSelfRefineAdvisor` is now `DecisionSelfRefineAdvisor` in Spring AI Decision Extensions (`org.springaicommunity:spring-ai-decision-self-refine`), and works with any Spring AI `DecisionModel`. See [DecisionSelfRefineAdvisor](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/self-refine/DecisionSelfRefineAdvisor/).
+    To move an application over, see [Coming from spring-ai-typesafe](https://spring-ai-community.github.io/spring-ai-decision-extensions/latest/migration/#what-behaves-differently).
+
 A self-refine `CallAdvisor`: it judges every model response with [`JevJudge`](JevJudge.md)
 and, when the response falls short, feeds the defect back into the prompt and tries again.
 
